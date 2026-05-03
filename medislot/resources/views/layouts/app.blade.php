@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>@yield('title', 'MEDISLOT')</title>
+    <link rel="icon" type="image/svg+xml" href="{{ asset('images/logo.svg') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -46,10 +47,12 @@
         }
         .sidebar-logo .logo-icon {
             width: 36px; height: 36px;
-            background: #2d9e72;
             border-radius: 8px;
             display: flex; align-items: center; justify-content: center;
-            font-size: 18px;
+            overflow: hidden;
+        }
+        .sidebar-logo .logo-icon img {
+            width: 100%; height: 100%; object-fit: contain;
         }
 
         .sidebar-nav { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 0 12px; }
@@ -128,7 +131,9 @@
 {{-- SIDEBAR --}}
 <aside class="sidebar">
     <div class="sidebar-logo">
-        <div class="logo-icon">🏥</div>
+        <div class="logo-icon">
+            <img src="{{ asset('images/logo.svg') }}" alt="MediSlot Logo">
+        </div>
         MEDISLOT
     </div>
 

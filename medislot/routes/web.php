@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\JiraController;
+use App\Http\Controllers\RecommendationController;
 
 Route::get('/', function () {
     return redirect('/login');
@@ -28,7 +29,7 @@ Route::middleware('auth')->group(function () {
 
     // Stub routes for sidebar (to be implemented per sprint)
     Route::get('/pengingat',          fn() => view('coming-soon', ['title' => 'Pengingat']))->name('pengingat.index');
-    Route::get('/rekomendasi',        fn() => view('coming-soon', ['title' => 'Rekomendasi']))->name('rekomendasi.index');
+    Route::get('/rekomendasi',        [RecommendationController::class, 'index'])->name('rekomendasi.index');
     Route::get('/data-kesehatan',     fn() => view('coming-soon', ['title' => 'Data Kesehatan']))->name('data-kesehatan.index');
     Route::get('/katalog',            fn() => view('coming-soon', ['title' => 'Katalog Pemeriksaan']))->name('katalog.index');
     Route::get('/jadwal',             fn() => view('coming-soon', ['title' => 'Jadwal Saya']))->name('jadwal.index');

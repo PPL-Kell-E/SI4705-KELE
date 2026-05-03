@@ -1,0 +1,6 @@
+# Claude Code (AI assistant) - jangan di-push ke GitHub
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
