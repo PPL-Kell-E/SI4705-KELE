@@ -255,7 +255,7 @@
                 <div class="info-row">
                     <span class="info-label">Alergi</span>
                     <div class="tag-list">
-                        @forelse($healthData->allergies ?? [] as $a)
+                        @forelse($healthData?->allergies ?? [] as $a)
                             <span class="tag danger">{{ $a }}</span>
                         @empty
                             <span class="tag none">Tidak ada</span>
@@ -265,7 +265,7 @@
                 <div class="info-row">
                     <span class="info-label">Penyakit Kronis</span>
                     <div class="tag-list">
-                        @forelse($healthData->chronic_conditions ?? [] as $c)
+                        @forelse($healthData?->chronic_conditions ?? [] as $c)
                             <span class="tag danger">{{ $c }}</span>
                         @empty
                             <span class="tag none">Tidak ada</span>
@@ -274,15 +274,15 @@
                 </div>
                 <div class="info-row">
                     <span class="info-label">Golongan Darah</span>
-                    <span class="info-value">{{ $healthData->blood_type ?? '-' }}</span>
+                    <span class="info-value">{{ $healthData?->blood_type ?? '-' }}</span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">Tinggi Badan</span>
-                    <span class="info-value">{{ $healthData->height_cm ? $healthData->height_cm . ' cm' : '-' }}</span>
+                    <span class="info-value">{{ $healthData?->height_cm ? $healthData?->height_cm . ' cm' : '-' }}</span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">Berat Badan</span>
-                    <span class="info-value">{{ $healthData->weight_kg ? $healthData->weight_kg . ' kg' : '-' }}</span>
+                    <span class="info-value">{{ $healthData?->weight_kg ? $healthData?->weight_kg . ' kg' : '-' }}</span>
                 </div>
             </div>
         </div>
@@ -352,7 +352,7 @@
                             <select name="blood_type" class="form-select">
                                 <option value="">-- Pilih --</option>
                                 @foreach(['A','B','AB','O','A+','A-','B+','B-','AB+','AB-','O+','O-'] as $bt)
-                                    <option value="{{ $bt }}" {{ old('blood_type', $healthData->blood_type ?? '') === $bt ? 'selected' : '' }}>{{ $bt }}</option>
+                                    <option value="{{ $bt }}" {{ old('blood_type', $healthData?->blood_type ?? '') === $bt ? 'selected' : '' }}>{{ $bt }}</option>
                                 @endforeach
                             </select>
                         </div>
@@ -360,26 +360,26 @@
                         <div class="form-group">
                             <label class="form-label">Tinggi Badan (cm)</label>
                             <input type="number" name="height_cm" class="form-input" step="0.1" min="50" max="250"
-                                   value="{{ old('height_cm', $healthData->height_cm ?? '') }}">
+                                   value="{{ old('height_cm', $healthData?->height_cm ?? '') }}">
                         </div>
 
                         <div class="form-group">
                             <label class="form-label">Berat Badan (kg)</label>
                             <input type="number" name="weight_kg" class="form-input" step="0.1" min="1" max="500"
-                                   value="{{ old('weight_kg', $healthData->weight_kg ?? '') }}">
+                                   value="{{ old('weight_kg', $healthData?->weight_kg ?? '') }}">
                         </div>
 
                         <div class="form-group">
                             <label class="form-label">Alergi (pisahkan koma)</label>
                             <input type="text" name="allergies" class="form-input"
-                                   value="{{ old('allergies', implode(', ', $healthData->allergies ?? [])) }}"
+                                   value="{{ old('allergies', implode(', ', $healthData?->allergies ?? [])) }}"
                                    placeholder="Kacang, Seafood, ...">
                         </div>
 
                         <div class="form-group full-width">
                             <label class="form-label">Penyakit Kronis (pisahkan koma)</label>
                             <input type="text" name="chronic_conditions" class="form-input"
-                                   value="{{ old('chronic_conditions', implode(', ', $healthData->chronic_conditions ?? [])) }}"
+                                   value="{{ old('chronic_conditions', implode(', ', $healthData?->chronic_conditions ?? [])) }}"
                                    placeholder="Diabetes, Asma, ...">
                         </div>
 
