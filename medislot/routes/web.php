@@ -6,6 +6,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\JiraController;
 use App\Http\Controllers\RecommendationController;
 use App\Http\Controllers\KatalogController;
+use App\Http\Controllers\HealthDataController;
 
 Route::get('/', function () {
     return redirect('/login');
@@ -31,7 +32,9 @@ Route::middleware('auth')->group(function () {
     // Stub routes for sidebar (to be implemented per sprint)
     Route::get('/pengingat',          fn() => view('coming-soon', ['title' => 'Pengingat']))->name('pengingat.index');
     Route::get('/rekomendasi',        [RecommendationController::class, 'index'])->name('rekomendasi.index');
-    Route::get('/data-kesehatan',     fn() => view('coming-soon', ['title' => 'Data Kesehatan']))->name('data-kesehatan.index');
+    Route::get('/data-kesehatan',        [HealthDataController::class, 'index'])->name('data-kesehatan.index');
+    Route::post('/data-kesehatan',       [HealthDataController::class, 'store'])->name('data-kesehatan.store');
+    Route::get('/data-kesehatan/export', [HealthDataController::class, 'export'])->name('data-kesehatan.export');
     Route::get('/katalog',             [KatalogController::class, 'index'])->name('katalog.index');
     Route::get('/katalog/{key}',       [KatalogController::class, 'show'])->name('katalog.show');
     Route::get('/jadwal',             fn() => view('coming-soon', ['title' => 'Jadwal Saya']))->name('jadwal.index');
