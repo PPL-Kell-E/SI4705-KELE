@@ -7,6 +7,7 @@ use App\Http\Controllers\JiraController;
 use App\Http\Controllers\RecommendationController;
 use App\Http\Controllers\KatalogController;
 use App\Http\Controllers\HealthDataController;
+use App\Http\Controllers\JadwalController;
 
 Route::get('/', function () {
     return redirect('/login');
@@ -38,7 +39,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/data-kesehatan/export',  [HealthDataController::class, 'export'])->name('data-kesehatan.export');
     Route::get('/katalog',             [KatalogController::class, 'index'])->name('katalog.index');
     Route::get('/katalog/{key}',       [KatalogController::class, 'show'])->name('katalog.show');
-    Route::get('/jadwal',             fn() => view('coming-soon', ['title' => 'Jadwal Saya']))->name('jadwal.index');
+    // PKE-5: Perencanaan Jadwal Pemeriksaan
+    Route::resource('/jadwal', JadwalController::class)->except(['show']);
     Route::get('/riwayat',            fn() => view('coming-soon', ['title' => 'Riwayat']))->name('riwayat.index');
     Route::get('/insight',            fn() => view('coming-soon', ['title' => 'Insight']))->name('insight.index');
     Route::get('/hasil-pemeriksaan',  fn() => view('coming-soon', ['title' => 'Hasil Pemeriksaan']))->name('hasil-pemeriksaan.index');
