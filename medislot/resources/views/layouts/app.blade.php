@@ -192,9 +192,15 @@
             @yield('topbar-actions')
             <div class="topbar-icon"><i class="fas fa-search"></i></div>
             <div class="topbar-icon"><i class="fas fa-bell"></i></div>
-            <div class="topbar-avatar">
-                {{ strtoupper(substr(Auth::user()->full_name ?? Auth::user()->name ?? 'U', 0, 1)) }}
-            </div>
+            <a href="{{ route('profile.show') }}" style="text-decoration:none;">
+                <div class="topbar-avatar" style="{{ !empty($authProfile?->avatar_url) ? 'background:transparent;padding:0;overflow:hidden;' : '' }}">
+                    @if(!empty($authProfile?->avatar_url))
+                        <img src="{{ $authProfile->avatar_url }}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;display:block;">
+                    @else
+                        {{ strtoupper(substr(Auth::user()->full_name ?? Auth::user()->name ?? 'U', 0, 1)) }}
+                    @endif
+                </div>
+            </a>
         </div>
     </header>
 

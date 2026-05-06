@@ -294,8 +294,12 @@
     <div class="info-card">
         <div class="section-title"><i class="fas fa-user-circle" style="color:#2d9e72; margin-right:8px;"></i>Informasi Akun</div>
         <div class="profile-row">
-            <div class="pr-avatar">
-                {{ strtoupper(substr(Auth::user()->full_name ?? Auth::user()->name ?? 'U', 0, 1)) }}
+            <div class="pr-avatar" style="{{ !empty($authProfile?->avatar_url) ? 'background:transparent;padding:0;overflow:hidden;' : '' }}">
+                @if(!empty($authProfile?->avatar_url))
+                    <img src="{{ $authProfile->avatar_url }}" style="width:52px;height:52px;border-radius:50%;object-fit:cover;display:block;">
+                @else
+                    {{ strtoupper(substr(Auth::user()->full_name ?? Auth::user()->name ?? 'U', 0, 1)) }}
+                @endif
             </div>
             <div>
                 <div style="font-weight:700; color:#1a3c34; font-size:15px;">
