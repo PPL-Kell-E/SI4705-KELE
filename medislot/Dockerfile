@@ -1,6 +1,6 @@
 FROM php:8.4-cli
 
-# System dependencies
+# System dependencies + Node.js
 RUN apt-get update && apt-get install -y \
     libpq-dev \
     zip \
@@ -8,6 +8,8 @@ RUN apt-get update && apt-get install -y \
     git \
     curl \
     libzip-dev \
+    nodejs \
+    npm \
     && docker-php-ext-install pdo pdo_pgsql zip \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -16,14 +18,17 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
-# Copy composer files first (layer caching)
+# Install PHP dependencies
 COPY composer.json composer.lock ./
-
-# Install PHP dependencies (no dev, no scripts)
 RUN composer install --no-dev --no-scripts --no-interaction --prefer-dist --optimize-autoloader
 
-# Copy the rest of the application
+# Install Node dependencies & build frontend assets
+COPY package.json ./
+RUN npm install
+
 COPY . .
+
+RUN npm run build
 
 # Ensure storage and cache dirs are writable
 RUN chmod -R 775 storage bootstrap/cache \
