@@ -5,6 +5,10 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\JiraController;
 use App\Http\Controllers\RecommendationController;
+use App\Http\Controllers\KatalogController;
+use App\Http\Controllers\HealthDataController;
+use App\Http\Controllers\JadwalController;
+use App\Http\Controllers\InsightController;
 
 Route::get('/', function () {
     return redirect('/login');
@@ -19,9 +23,7 @@ Route::middleware('guest')->group(function () {
 
 Route::middleware('auth')->group(function () {
     // Dashboard
-    Route::get('/dashboard', function () {
-        return view('dashboard');
-    })->name('dashboard');
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     // PKE-1: Pengelolaan Profil (PKE-22: Lihat, PKE-23: Ubah)
     Route::get('/profile',  [ProfileController::class, 'show'])->name('profile.show');
@@ -29,12 +31,24 @@ Route::middleware('auth')->group(function () {
 
     // Stub routes for sidebar (to be implemented per sprint)
     Route::get('/pengingat',          fn() => view('coming-soon', ['title' => 'Pengingat']))->name('pengingat.index');
-    Route::get('/rekomendasi',        [RecommendationController::class, 'index'])->name('rekomendasi.index');
-    Route::get('/data-kesehatan',     fn() => view('coming-soon', ['title' => 'Data Kesehatan']))->name('data-kesehatan.index');
-    Route::get('/katalog',            fn() => view('coming-soon', ['title' => 'Katalog Pemeriksaan']))->name('katalog.index');
-    Route::get('/jadwal',             fn() => view('coming-soon', ['title' => 'Jadwal Saya']))->name('jadwal.index');
+    // PKE: Rekomendasi CRUD
+    Route::get('/rekomendasi',                             [RecommendationController::class, 'index'])->name('rekomendasi.index');
+    Route::post('/rekomendasi',                            [RecommendationController::class, 'store'])->name('rekomendasi.store');
+    Route::put('/rekomendasi/{rekomendasi}',               [RecommendationController::class, 'update'])->name('rekomendasi.update');
+    Route::delete('/rekomendasi/{rekomendasi}',            [RecommendationController::class, 'destroy'])->name('rekomendasi.destroy');
+    // PKE-2: Data Kesehatan Dasar
+    Route::get('/data-kesehatan',         [HealthDataController::class, 'index'])->name('data-kesehatan.index');
+    Route::post('/data-kesehatan',        [HealthDataController::class, 'store'])->name('data-kesehatan.store');
+    Route::get('/data-kesehatan/export',  [HealthDataController::class, 'export'])->name('data-kesehatan.export');
+    Route::get('/katalog',             [KatalogController::class, 'index'])->name('katalog.index');
+    Route::get('/katalog/{key}',       [KatalogController::class, 'show'])->name('katalog.show');
+    // PKE-5: Perencanaan Jadwal Pemeriksaan
+    Route::resource('/jadwal', JadwalController::class)->except(['show']);
+    Route::patch('/jadwal/{jadwal}/selesai', [JadwalController::class, 'tandaiSelesai'])->name('jadwal.selesai');
     Route::get('/riwayat',            fn() => view('coming-soon', ['title' => 'Riwayat']))->name('riwayat.index');
-    Route::get('/insight',            fn() => view('coming-soon', ['title' => 'Insight']))->name('insight.index');
+    // PKE-15: Insight & Pencapaian
+    Route::get('/insight',            [InsightController::class, 'index'])->name('insight.index');
+    Route::get('/insight/progress',   fn() => view('coming-soon', ['title' => 'Progress']))->name('insight.progress');
     Route::get('/hasil-pemeriksaan',  fn() => view('coming-soon', ['title' => 'Hasil Pemeriksaan']))->name('hasil-pemeriksaan.index');
 
     // Jira Integration Routes

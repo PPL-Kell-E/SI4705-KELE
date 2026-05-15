@@ -2,296 +2,238 @@
 
 @section('title', 'Rekomendasi Pemeriksaan - MEDISLOT')
 @section('page-title', 'Rekomendasi Pemeriksaan')
-@section('page-subtitle', 'Klik "Buat pengingat" setelah kamu selesai melakukan pemeriksaan')
+@section('page-subtitle', 'Kelola dan tambahkan rekomendasi pemeriksaan kesehatanmu sendiri.')
 
 @section('extra-styles')
 <style>
-    .rekomen-list {
-        display: flex;
-        flex-direction: column;
-        gap: 14px;
-        max-width: 860px;
-    }
+.rec-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; }
+.btn-add {
+    display:inline-flex; align-items:center; gap:8px;
+    background:#1a3c34; color:#fff; border:none; border-radius:10px;
+    padding:10px 20px; font-size:13.5px; font-weight:600; cursor:pointer;
+    font-family:inherit; text-decoration:none; transition:background 0.18s;
+}
+.btn-add:hover { background:#2d9e72; }
 
-    /* ── CARD ── */
-    .rekomen-card {
-        background: #fff;
-        border-radius: 14px;
-        padding: 20px 24px;
-        display: flex;
-        align-items: center;
-        gap: 20px;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-        transition: box-shadow 0.2s, border-color 0.3s;
-        border-left: 4px solid #e2e8e6;
-        position: relative;
-        overflow: hidden;
-    }
-    .rekomen-card:hover { box-shadow: 0 4px 18px rgba(0,0,0,0.09); }
-    .rekomen-card.active { border-left-color: #2d9e72; background: #f9fefb; }
-    .rekomen-card.active.urgent { border-left-color: #e05252; background: #fffafa; }
-    .rekomen-card.active.soon   { border-left-color: #f0a500; background: #fffdf5; }
+.rec-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px; }
+.rec-card {
+    background:#fff; border-radius:14px; padding:22px;
+    box-shadow:0 1px 4px rgba(0,0,0,0.06);
+    display:flex; flex-direction:column; gap:14px;
+}
+.rec-card-top { display:flex; align-items:flex-start; gap:14px; }
+.rec-icon {
+    width:50px; height:50px; border-radius:13px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:20px; flex-shrink:0;
+}
+.rec-name { font-size:14.5px; font-weight:700; color:#1a3c34; margin-bottom:4px; }
+.rec-desc { font-size:12.5px; color:#7a9a90; line-height:1.45; }
+.rec-interval {
+    display:inline-flex; align-items:center; gap:6px;
+    background:#f0f4f3; color:#4a6a60; font-size:12px; font-weight:600;
+    padding:4px 10px; border-radius:20px;
+}
+.rec-interval i { font-size:11px; color:#2d9e72; }
+.rec-actions { display:flex; gap:8px; margin-top:auto; }
+.btn-sm {
+    flex:1; display:inline-flex; align-items:center; justify-content:center; gap:5px;
+    padding:8px 12px; border-radius:8px; font-size:12.5px; font-weight:600;
+    cursor:pointer; border:none; font-family:inherit; text-decoration:none; transition:opacity 0.15s;
+}
+.btn-sm:hover { opacity:0.85; }
+.btn-jadwal { background:#e8fff4; color:#2d9e72; }
+.btn-edit   { background:#e8f4ff; color:#4a90d9; }
+.btn-delete { background:#fde8e8; color:#e74c3c; }
+.rec-default-badge {
+    font-size:10.5px; color:#7a9a90; font-weight:500;
+    padding:2px 8px; background:#f0f4f3; border-radius:10px;
+}
 
-    .rekomen-icon {
-        width: 54px; height: 54px;
-        border-radius: 50%;
-        display: flex; align-items: center; justify-content: center;
-        font-size: 22px;
-        flex-shrink: 0;
-    }
+/* MODAL */
+.modal-overlay {
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4);
+    z-index:500; align-items:center; justify-content:center;
+}
+.modal-overlay.open { display:flex; }
+.modal-box {
+    background:#fff; border-radius:16px; padding:28px;
+    width:100%; max-width:460px; box-shadow:0 8px 32px rgba(0,0,0,0.15);
+}
+.modal-title { font-size:16px; font-weight:700; color:#1a3c34; margin-bottom:20px; }
+.form-group { margin-bottom:16px; }
+.form-label { font-size:13px; font-weight:600; color:#4a6a60; margin-bottom:6px; display:block; }
+.form-input, .form-textarea {
+    width:100%; border:1.5px solid #dce8e4; border-radius:9px;
+    padding:10px 14px; font-size:13.5px; color:#1a3c34; font-family:inherit;
+    outline:none; transition:border-color 0.18s; background:#fff;
+}
+.form-input:focus, .form-textarea:focus { border-color:#2d9e72; }
+.form-textarea { resize:vertical; min-height:80px; }
+.form-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.modal-footer { display:flex; gap:10px; margin-top:20px; justify-content:flex-end; }
+.btn-cancel {
+    padding:10px 20px; border-radius:9px; background:#f0f4f3; color:#4a6a60;
+    font-size:13.5px; font-weight:600; border:none; cursor:pointer; font-family:inherit;
+}
+.btn-save {
+    padding:10px 20px; border-radius:9px; background:#1a3c34; color:#fff;
+    font-size:13.5px; font-weight:600; border:none; cursor:pointer; font-family:inherit;
+    transition:background 0.18s;
+}
+.btn-save:hover { background:#2d9e72; }
 
-    .rekomen-info { flex: 1; min-width: 0; }
-    .rekomen-info h3 {
-        font-size: 15px;
-        font-weight: 700;
-        color: #1a3c34;
-        margin-bottom: 3px;
-    }
-    .rekomen-info .desc {
-        font-size: 12.5px;
-        color: #7a9a90;
-        margin: 0;
-    }
-
-    /* ── COUNTDOWN BLOCK (tampil saat aktif) ── */
-    .rekomen-countdown {
-        display: none;
-        flex-direction: column;
-        align-items: flex-end;
-        gap: 5px;
-        flex-shrink: 0;
-        min-width: 190px;
-    }
-    .rekomen-card.active .rekomen-countdown { display: flex; }
-    .rekomen-card.active .btn-pengingat-wrap { display: none; }
-
-    .countdown-next {
-        font-size: 12px;
-        color: #5a7a70;
-        display: flex; align-items: center; gap: 5px;
-    }
-    .countdown-next i { font-size: 11px; }
-
-    .countdown-days {
-        font-size: 13px;
-        font-weight: 700;
-        padding: 4px 12px;
-        border-radius: 20px;
-    }
-    .countdown-days.normal { background: #e8f5f0; color: #1a7a58; }
-    .countdown-days.soon   { background: #fef3cd; color: #9a6700; }
-    .countdown-days.urgent { background: #fde8e8; color: #c0392b; }
-
-    .btn-cancel {
-        font-size: 11.5px;
-        color: #aaa;
-        background: none;
-        border: none;
-        cursor: pointer;
-        padding: 0;
-        font-family: inherit;
-        text-decoration: underline;
-        margin-top: 2px;
-    }
-    .btn-cancel:hover { color: #e05252; }
-
-    /* ── BUTTON (tampil saat belum aktif) ── */
-    .btn-pengingat-wrap { flex-shrink: 0; }
-    .btn-pengingat {
-        background: #2d9e72;
-        color: #fff;
-        border: none;
-        border-radius: 8px;
-        padding: 10px 18px;
-        font-size: 13px;
-        font-weight: 600;
-        font-family: 'Inter', sans-serif;
-        cursor: pointer;
-        white-space: nowrap;
-        transition: background 0.18s;
-    }
-    .btn-pengingat:hover { background: #258a62; }
-
-    /* ── TOAST ── */
-    #toast {
-        position: fixed;
-        bottom: 28px; right: 28px;
-        background: #1a3c34;
-        color: #fff;
-        padding: 14px 20px;
-        border-radius: 12px;
-        font-size: 13.5px;
-        font-weight: 500;
-        box-shadow: 0 6px 24px rgba(0,0,0,0.2);
-        display: none;
-        flex-direction: column;
-        gap: 4px;
-        z-index: 999;
-        max-width: 320px;
-        animation: slideUp 0.3s ease;
-    }
-    #toast.show { display: flex; }
-    #toast .toast-top {
-        display: flex; align-items: center; gap: 8px;
-        font-weight: 700; font-size: 14px;
-    }
-    #toast .toast-top i { color: #2d9e72; font-size: 16px; }
-    #toast .toast-sub { font-size: 12.5px; opacity: 0.8; padding-left: 24px; }
-
-    @keyframes slideUp {
-        from { opacity: 0; transform: translateY(12px); }
-        to   { opacity: 1; transform: translateY(0); }
-    }
+.alert-success {
+    background:#e8fff4; border:1px solid #a8dfc4; color:#1a7a4e;
+    border-radius:10px; padding:12px 16px; margin-bottom:20px;
+    display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:500;
+}
 </style>
 @endsection
 
+@section('topbar-actions')
+<button class="btn-add" onclick="openAddModal()">
+    <i class="fas fa-plus"></i> Tambah Rekomendasi
+</button>
+@endsection
+
 @section('content')
-<div class="rekomen-list">
-    @foreach ($recommendations as $item)
-    <div class="rekomen-card" id="card-{{ $item['key'] }}">
 
-        {{-- Icon --}}
-        <div class="rekomen-icon"
-             style="background: {{ $item['bg_color'] }}; color: {{ $item['icon_color'] }};">
-            <i class="fas {{ $item['icon'] }}"></i>
-        </div>
+@if(session('success'))
+<div class="alert-success"><i class="fas fa-check-circle"></i> {{ session('success') }}</div>
+@endif
 
-        {{-- Info --}}
-        <div class="rekomen-info">
-            <h3>{{ $item['name'] }}</h3>
-            <p class="desc">{{ $item['description'] }}</p>
-        </div>
-
-        {{-- Countdown (muncul setelah pengingat aktif) --}}
-        <div class="rekomen-countdown" id="countdown-{{ $item['key'] }}">
-            <div class="countdown-next">
-                <i class="fas fa-calendar-alt"></i>
-                <span id="date-{{ $item['key'] }}"></span>
+<div class="rec-grid">
+    @forelse($recommendations as $rec)
+    <div class="rec-card">
+        <div class="rec-card-top">
+            <div class="rec-icon" style="background:{{ $rec->bg_color }};color:{{ $rec->icon_color }};">
+                <i class="fas {{ $rec->icon }}"></i>
             </div>
-            <div class="countdown-days normal" id="days-{{ $item['key'] }}"></div>
-            <button class="btn-cancel" onclick="cancelReminder('{{ $item['key'] }}')">
-                Batalkan pengingat
-            </button>
+            <div>
+                <div class="rec-name">
+                    {{ $rec->nama }}
+                    @if($rec->is_default)
+                        <span class="rec-default-badge">Default</span>
+                    @endif
+                </div>
+                <div class="rec-desc">{{ $rec->deskripsi ?? '-' }}</div>
+            </div>
         </div>
 
-        {{-- Button (hilang setelah pengingat aktif) --}}
-        <div class="btn-pengingat-wrap">
-            <button class="btn-pengingat"
-                onclick="setReminder('{{ $item['key'] }}', '{{ $item['name'] }}', {{ $item['interval_days'] }}, '{{ $item['interval_label'] }}')">
-                <i class="fas fa-bell" style="margin-right:6px;"></i>Buat pengingat
-            </button>
+        <div>
+            <div class="rec-interval">
+                <i class="fas fa-clock"></i> Setiap {{ $rec->interval_label }}
+            </div>
         </div>
 
+        <div class="rec-actions">
+            <a href="{{ route('jadwal.create') }}" class="btn-sm btn-jadwal">
+                <i class="fas fa-calendar-plus"></i> Jadwalkan
+            </a>
+            <button class="btn-sm btn-edit" onclick="openEditModal({{ $rec->id }}, '{{ addslashes($rec->nama) }}', '{{ addslashes($rec->deskripsi ?? '') }}', {{ $rec->interval_days }}, '{{ addslashes($rec->interval_label) }}')">
+                <i class="fas fa-pen"></i> Edit
+            </button>
+            <form method="POST" action="{{ route('rekomendasi.destroy', $rec) }}" onsubmit="return confirm('Hapus rekomendasi ini?');">
+                @csrf @method('DELETE')
+                <button type="submit" class="btn-sm btn-delete">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </form>
+        </div>
     </div>
-    @endforeach
+    @empty
+    <div style="grid-column:1/-1;text-align:center;padding:48px;color:#7a9a90;">
+        <i class="fas fa-clipboard-list" style="font-size:36px;opacity:0.3;display:block;margin-bottom:12px;"></i>
+        Belum ada rekomendasi. Tambahkan rekomendasi pertamamu!
+    </div>
+    @endforelse
 </div>
 
-{{-- Toast --}}
-<div id="toast">
-    <div class="toast-top">
-        <i class="fas fa-check-circle"></i>
-        <span id="toast-title"></span>
+{{-- MODAL TAMBAH --}}
+<div class="modal-overlay" id="addModal">
+    <div class="modal-box">
+        <div class="modal-title"><i class="fas fa-plus-circle" style="color:#2d9e72;"></i> Tambah Rekomendasi</div>
+        <form method="POST" action="{{ route('rekomendasi.store') }}">
+            @csrf
+            <div class="form-group">
+                <label class="form-label">Nama Pemeriksaan *</label>
+                <input type="text" name="nama" class="form-input" placeholder="contoh: Pemeriksaan Ginjal" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Deskripsi</label>
+                <textarea name="deskripsi" class="form-textarea" placeholder="Keterangan singkat..."></textarea>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Interval (hari) *</label>
+                    <input type="number" name="interval_days" class="form-input" placeholder="180" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Label Interval *</label>
+                    <input type="text" name="interval_label" class="form-input" placeholder="6 bulan" required>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-cancel" onclick="closeModal('addModal')">Batal</button>
+                <button type="submit" class="btn-save"><i class="fas fa-save"></i> Simpan</button>
+            </div>
+        </form>
     </div>
-    <div class="toast-sub" id="toast-sub"></div>
 </div>
+
+{{-- MODAL EDIT --}}
+<div class="modal-overlay" id="editModal">
+    <div class="modal-box">
+        <div class="modal-title"><i class="fas fa-pen" style="color:#4a90d9;"></i> Edit Rekomendasi</div>
+        <form method="POST" id="editForm" action="">
+            @csrf @method('PUT')
+            <div class="form-group">
+                <label class="form-label">Nama Pemeriksaan *</label>
+                <input type="text" name="nama" id="editNama" class="form-input" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Deskripsi</label>
+                <textarea name="deskripsi" id="editDeskripsi" class="form-textarea"></textarea>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Interval (hari) *</label>
+                    <input type="number" name="interval_days" id="editDays" class="form-input" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Label Interval *</label>
+                    <input type="text" name="interval_label" id="editLabel" class="form-input" required>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-cancel" onclick="closeModal('editModal')">Batal</button>
+                <button type="submit" class="btn-save"><i class="fas fa-save"></i> Perbarui</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 @endsection
 
 @section('scripts')
 <script>
-const STORAGE_KEY = 'medislot_reminders';
-
-function getReminders() {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+function openAddModal() {
+    document.getElementById('addModal').classList.add('open');
 }
-
-function saveReminders(data) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+function openEditModal(id, nama, deskripsi, days, label) {
+    document.getElementById('editForm').action = '/rekomendasi/' + id;
+    document.getElementById('editNama').value = nama;
+    document.getElementById('editDeskripsi').value = deskripsi;
+    document.getElementById('editDays').value = days;
+    document.getElementById('editLabel').value = label;
+    document.getElementById('editModal').classList.add('open');
 }
-
-function formatDate(dateStr) {
-    const months = ['Januari','Februari','Maret','April','Mei','Juni',
-                    'Juli','Agustus','September','Oktober','November','Desember'];
-    const d = new Date(dateStr);
-    return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+function closeModal(id) {
+    document.getElementById(id).classList.remove('open');
 }
-
-function daysLeft(targetDateStr) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const target = new Date(targetDateStr);
-    target.setHours(0, 0, 0, 0);
-    return Math.ceil((target - today) / (1000 * 60 * 60 * 24));
-}
-
-function urgencyClass(days) {
-    if (days <= 14)  return 'urgent';
-    if (days <= 60)  return 'soon';
-    return 'normal';
-}
-
-function countdownLabel(days) {
-    if (days <= 0)  return 'Hari ini!';
-    if (days === 1) return 'Besok';
-    return `${days} hari lagi`;
-}
-
-function renderCard(key, targetDate) {
-    const days   = daysLeft(targetDate);
-    const urg    = urgencyClass(days);
-    const card   = document.getElementById('card-' + key);
-    const dateEl = document.getElementById('date-' + key);
-    const daysEl = document.getElementById('days-' + key);
-
-    dateEl.textContent = formatDate(targetDate);
-    daysEl.textContent = countdownLabel(days);
-    daysEl.className   = 'countdown-days ' + urg;
-
-    card.classList.add('active');
-    if (urg !== 'normal') card.classList.add(urg);
-}
-
-function setReminder(key, name, intervalDays, intervalLabel) {
-    const today  = new Date();
-    const target = new Date(today);
-    target.setDate(today.getDate() + intervalDays);
-    const targetStr = target.toISOString().split('T')[0];
-
-    const reminders = getReminders();
-    reminders[key]  = { targetDate: targetStr, name };
-    saveReminders(reminders);
-
-    renderCard(key, targetStr);
-
-    const days = daysLeft(targetStr);
-    showToast(name, formatDate(targetStr), days, intervalLabel);
-}
-
-function cancelReminder(key) {
-    const reminders = getReminders();
-    delete reminders[key];
-    saveReminders(reminders);
-
-    const card = document.getElementById('card-' + key);
-    card.classList.remove('active', 'urgent', 'soon');
-}
-
-function showToast(name, date, days, intervalLabel) {
-    document.getElementById('toast-title').textContent = `Pengingat "${name}" aktif!`;
-    document.getElementById('toast-sub').textContent =
-        `Check-up berikutnya: ${date} — ${countdownLabel(days)} (${intervalLabel} dari sekarang)`;
-
-    const toast = document.getElementById('toast');
-    toast.classList.add('show');
-    setTimeout(() => toast.classList.remove('show'), 4000);
-}
-
-// Restore reminders dari localStorage saat halaman dibuka
-document.addEventListener('DOMContentLoaded', () => {
-    const reminders = getReminders();
-    Object.entries(reminders).forEach(([key, data]) => {
-        const card = document.getElementById('card-' + key);
-        if (card) renderCard(key, data.targetDate);
-    });
+document.querySelectorAll('.modal-overlay').forEach(m => {
+    m.addEventListener('click', function(e) { if (e.target === this) this.classList.remove('open'); });
 });
 </script>
 @endsection

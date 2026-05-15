@@ -72,6 +72,23 @@
         .nav-item:hover { background: rgba(255,255,255,0.1); color: #fff; }
         .nav-item.active { background: #2d9e72; color: #fff; }
         .nav-item i { width: 18px; text-align: center; font-size: 14px; }
+        .nav-item .nav-arrow { margin-left: auto; font-size: 10px; transition: transform 0.2s; }
+        .nav-item.open .nav-arrow { transform: rotate(180deg); }
+        .nav-submenu { display: none; padding-left: 40px; margin-top: 2px; }
+        .nav-submenu.open { display: flex; flex-direction: column; gap: 2px; }
+        .nav-sub-item {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 12px; color: rgba(255,255,255,0.6);
+            text-decoration: none; font-size: 12.5px; font-weight: 500;
+            border-radius: 8px; transition: all 0.18s ease;
+        }
+        .nav-sub-item:hover { background: rgba(255,255,255,0.08); color: #fff; }
+        .nav-sub-item.active { color: #fff; }
+        .nav-sub-item .dot {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: rgba(255,255,255,0.35); flex-shrink: 0;
+        }
+        .nav-sub-item.active .dot { background: #fff; }
 
         .sidebar-footer {
             padding: 16px 24px;
@@ -159,9 +176,19 @@
         <a href="{{ route('riwayat.index') }}" class="nav-item {{ request()->routeIs('riwayat.*') ? 'active' : '' }}">
             <i class="fas fa-history"></i> Riwayat
         </a>
-        <a href="{{ route('insight.index') }}" class="nav-item {{ request()->routeIs('insight.*') ? 'active' : '' }}">
-            <i class="fas fa-chart-line"></i> Insight
+        @php $insightOpen = request()->routeIs('insight.*'); @endphp
+        <a href="#" class="nav-item {{ $insightOpen ? 'open' : '' }}" onclick="toggleInsightMenu(event)">
+            <i class="fas fa-lightbulb"></i> Insight
+            <i class="fas fa-chevron-down nav-arrow"></i>
         </a>
+        <div class="nav-submenu {{ $insightOpen ? 'open' : '' }}" id="insight-submenu">
+            <a href="{{ route('insight.progress') }}" class="nav-sub-item {{ request()->routeIs('insight.progress') ? 'active' : '' }}">
+                <span class="dot"></span> Progress
+            </a>
+            <a href="{{ route('insight.index') }}" class="nav-sub-item {{ request()->routeIs('insight.index') ? 'active' : '' }}">
+                <span class="dot"></span> Insight &amp; Pencapaian
+            </a>
+        </div>
         <a href="{{ route('hasil-pemeriksaan.index') }}" class="nav-item {{ request()->routeIs('hasil-pemeriksaan.*') ? 'active' : '' }}">
             <i class="fas fa-file-medical-alt"></i> Hasil Pemeriksaan
         </a>
@@ -192,9 +219,15 @@
             @yield('topbar-actions')
             <div class="topbar-icon"><i class="fas fa-search"></i></div>
             <div class="topbar-icon"><i class="fas fa-bell"></i></div>
-            <div class="topbar-avatar">
-                {{ strtoupper(substr(Auth::user()->full_name ?? Auth::user()->name ?? 'U', 0, 1)) }}
-            </div>
+            <a href="{{ route('profile.show') }}" style="text-decoration:none;">
+                <div class="topbar-avatar" style="{{ !empty($authProfile?->avatar_url) ? 'background:transparent;padding:0;overflow:hidden;' : '' }}">
+                    @if(!empty($authProfile?->avatar_url))
+                        <img src="{{ $authProfile->avatar_url }}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;display:block;">
+                    @else
+                        {{ strtoupper(substr(Auth::user()->full_name ?? Auth::user()->name ?? 'U', 0, 1)) }}
+                    @endif
+                </div>
+            </a>
         </div>
     </header>
 
@@ -205,5 +238,14 @@
 </div>
 
 @yield('scripts')
+<script>
+function toggleInsightMenu(e) {
+    e.preventDefault();
+    const btn = e.currentTarget;
+    const sub = document.getElementById('insight-submenu');
+    btn.classList.toggle('open');
+    sub.classList.toggle('open');
+}
+</script>
 </body>
 </html>
