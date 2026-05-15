@@ -8,6 +8,7 @@ use App\Http\Controllers\RecommendationController;
 use App\Http\Controllers\KatalogController;
 use App\Http\Controllers\HealthDataController;
 use App\Http\Controllers\JadwalController;
+use App\Http\Controllers\InsightController;
 
 Route::get('/', function () {
     return redirect('/login');
@@ -42,7 +43,9 @@ Route::middleware('auth')->group(function () {
     // PKE-5: Perencanaan Jadwal Pemeriksaan
     Route::resource('/jadwal', JadwalController::class)->except(['show']);
     Route::get('/riwayat',            fn() => view('coming-soon', ['title' => 'Riwayat']))->name('riwayat.index');
-    Route::get('/insight',            fn() => view('coming-soon', ['title' => 'Insight']))->name('insight.index');
+    // PKE-15: Insight & Pencapaian
+    Route::get('/insight',            [InsightController::class, 'index'])->name('insight.index');
+    Route::get('/insight/progress',   fn() => view('coming-soon', ['title' => 'Progress']))->name('insight.progress');
     Route::get('/hasil-pemeriksaan',  fn() => view('coming-soon', ['title' => 'Hasil Pemeriksaan']))->name('hasil-pemeriksaan.index');
 
     // Jira Integration Routes
