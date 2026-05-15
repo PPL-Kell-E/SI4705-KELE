@@ -77,6 +77,13 @@ class JadwalController extends Controller
         return redirect()->route('jadwal.index')->with('success', 'Jadwal berhasil diperbarui');
     }
 
+    public function tandaiSelesai(Jadwal $jadwal)
+    {
+        abort_if($jadwal->user_id !== Auth::id(), 403);
+        $jadwal->update(['status' => 'selesai']);
+        return redirect()->route('dashboard')->with('success', 'Jadwal berhasil ditandai selesai.');
+    }
+
     public function destroy(Jadwal $jadwal)
     {
         abort_if($jadwal->user_id !== Auth::id(), 403);

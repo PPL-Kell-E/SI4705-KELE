@@ -31,7 +31,11 @@ Route::middleware('auth')->group(function () {
 
     // Stub routes for sidebar (to be implemented per sprint)
     Route::get('/pengingat',          fn() => view('coming-soon', ['title' => 'Pengingat']))->name('pengingat.index');
-    Route::get('/rekomendasi',        [RecommendationController::class, 'index'])->name('rekomendasi.index');
+    // PKE: Rekomendasi CRUD
+    Route::get('/rekomendasi',                             [RecommendationController::class, 'index'])->name('rekomendasi.index');
+    Route::post('/rekomendasi',                            [RecommendationController::class, 'store'])->name('rekomendasi.store');
+    Route::put('/rekomendasi/{rekomendasi}',               [RecommendationController::class, 'update'])->name('rekomendasi.update');
+    Route::delete('/rekomendasi/{rekomendasi}',            [RecommendationController::class, 'destroy'])->name('rekomendasi.destroy');
     // PKE-2: Data Kesehatan Dasar
     Route::get('/data-kesehatan',         [HealthDataController::class, 'index'])->name('data-kesehatan.index');
     Route::post('/data-kesehatan',        [HealthDataController::class, 'store'])->name('data-kesehatan.store');
@@ -40,6 +44,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/katalog/{key}',       [KatalogController::class, 'show'])->name('katalog.show');
     // PKE-5: Perencanaan Jadwal Pemeriksaan
     Route::resource('/jadwal', JadwalController::class)->except(['show']);
+    Route::patch('/jadwal/{jadwal}/selesai', [JadwalController::class, 'tandaiSelesai'])->name('jadwal.selesai');
     Route::get('/riwayat',            fn() => view('coming-soon', ['title' => 'Riwayat']))->name('riwayat.index');
     // PKE-15: Insight & Pencapaian
     Route::get('/insight',            [InsightController::class, 'index'])->name('insight.index');
