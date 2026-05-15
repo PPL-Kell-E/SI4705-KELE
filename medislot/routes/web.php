@@ -22,9 +22,7 @@ Route::middleware('guest')->group(function () {
 
 Route::middleware('auth')->group(function () {
     // Dashboard
-    Route::get('/dashboard', function () {
-        return view('dashboard');
-    })->name('dashboard');
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     // PKE-1: Pengelolaan Profil (PKE-22: Lihat, PKE-23: Ubah)
     Route::get('/profile',  [ProfileController::class, 'show'])->name('profile.show');

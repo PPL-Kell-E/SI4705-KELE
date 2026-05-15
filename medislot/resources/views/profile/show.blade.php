@@ -200,13 +200,14 @@
 
         <div class="avatar-wrapper">
             @if($profile->avatar_url)
-                <img src="{{ $profile->avatar_url }}" alt="Avatar" class="avatar-img">
+                <img id="avatarPreview" src="{{ $profile->avatar_url }}" alt="Avatar" class="avatar-img">
             @else
-                <div class="avatar-placeholder">
+                <div id="avatarPlaceholder" class="avatar-placeholder">
                     {{ strtoupper(substr($profile->name, 0, 1)) }}
                 </div>
+                <img id="avatarPreview" src="" alt="Avatar" class="avatar-img" style="display:none">
             @endif
-            <div class="avatar-edit-btn" onclick="document.getElementById('avatarInput').click()">
+            <div class="avatar-edit-btn" onclick="triggerAvatarUpload()">
                 <i class="fas fa-camera"></i>
             </div>
         </div>
@@ -293,7 +294,8 @@
                 @csrf
                 @method('PUT')
 
-                <input type="file" id="avatarInput" name="avatar" style="display:none" accept="image/*">
+                <input type="file" id="avatarInput" name="avatar" accept="image/*"
+                       style="display:none" onchange="previewAvatar(this)">
 
                 {{-- Informasi Pribadi (editable) --}}
                 <div class="info-card" style="margin-bottom: 20px;">
@@ -309,7 +311,7 @@
                         <div class="form-group">
                             <label class="form-label">Tanggal Lahir</label>
                             <input type="date" name="birth_date" class="form-input"
-                                   value="{{ old('birth_date', $profile->birth_date) }}">
+                                   value="{{ old('birth_date', $profile->birth_date?->format('Y-m-d')) }}">
                         </div>
 
                         <div class="form-group">
@@ -413,6 +415,28 @@ function toggleEditMode() {
         btnEdit.style.display        = 'none';
         btnEditActions.style.display = 'flex';
     }
+}
+
+function triggerAvatarUpload() {
+    // Switch to edit mode first so the file input is inside the active form
+    const editMode = document.getElementById('editMode');
+    if (editMode.style.display !== 'block') {
+        toggleEditMode();
+    }
+    document.getElementById('avatarInput').click();
+}
+
+function previewAvatar(input) {
+    if (!input.files || !input.files[0]) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const preview     = document.getElementById('avatarPreview');
+        const placeholder = document.getElementById('avatarPlaceholder');
+        preview.src           = e.target.result;
+        preview.style.display = 'block';
+        if (placeholder) placeholder.style.display = 'none';
+    };
+    reader.readAsDataURL(input.files[0]);
 }
 
 // Auto-open edit mode if there were validation errors
