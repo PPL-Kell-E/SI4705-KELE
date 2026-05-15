@@ -69,39 +69,21 @@ class ProfileController extends Controller
         $user = Auth::user();
 
         // Handle avatar upload
-        $avatarUrl = null;
+        $profile = Profile::firstOrCreate(['id' => $user->id]);
+
         if ($request->hasFile('avatar')) {
             $path = $request->file('avatar')->store("avatars/{$user->id}", 'public');
-            $avatarUrl = Storage::url($path);
+            $profile->avatar_url = Storage::url($path);
         }
 
-        // Update profile
-        $profile = Profile::updateOrCreate(
-            ['id' => $user->id],
-            array_filter([
-                'name'       => $request->name,
-                'age'        => $request->age,
-                'gender'     => $request->gender,
-                'phone'      => $request->phone,
-                'address'    => $request->address,
-                'birth_date' => $request->birth_date,
-                'avatar_url' => $avatarUrl,
-            ], fn($v) => $v !== null || $v === $request->address) // keep nulls for optional fields
-        );
-
-        // Keep all optional fields (allow null)
-        $profile->update([
+        $profile->fill([
             'name'       => $request->name,
             'age'        => (int) $request->age,
             'gender'     => $request->gender,
             'phone'      => $request->phone,
             'address'    => $request->address,
             'birth_date' => $request->birth_date,
-        ]);
-
-        if ($avatarUrl) {
-            $profile->update(['avatar_url' => $avatarUrl]);
-        }
+        ])->save();
 
         // Update health data
         $allergies  = $request->allergies
