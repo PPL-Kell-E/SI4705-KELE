@@ -7,6 +7,7 @@ use App\Http\Controllers\JiraController;
 use App\Http\Controllers\RecommendationController;
 use App\Http\Controllers\KatalogController;
 use App\Http\Controllers\HealthDataController;
+use App\Http\Controllers\HasilPemeriksaanController;
 
 Route::get('/', function () {
     return redirect('/login');
@@ -41,7 +42,12 @@ Route::middleware('auth')->group(function () {
     Route::get('/jadwal',             fn() => view('coming-soon', ['title' => 'Jadwal Saya']))->name('jadwal.index');
     Route::get('/riwayat',            fn() => view('coming-soon', ['title' => 'Riwayat']))->name('riwayat.index');
     Route::get('/insight',            fn() => view('coming-soon', ['title' => 'Insight']))->name('insight.index');
-    Route::get('/hasil-pemeriksaan',  fn() => view('coming-soon', ['title' => 'Hasil Pemeriksaan']))->name('hasil-pemeriksaan.index');
+    Route::get('/insight/progress',   fn() => view('coming-soon', ['title' => 'Progress']))->name('insight.progress');
+    // PKE-11: Pencatatan Hasil Pemeriksaan
+    Route::get('/hasil-pemeriksaan',                       [HasilPemeriksaanController::class, 'index'])->name('hasil-pemeriksaan.index');
+    Route::post('/hasil-pemeriksaan',                      [HasilPemeriksaanController::class, 'store'])->name('hasil-pemeriksaan.store');
+    Route::put('/hasil-pemeriksaan/{hasilPemeriksaan}',    [HasilPemeriksaanController::class, 'update'])->name('hasil-pemeriksaan.update');
+    Route::delete('/hasil-pemeriksaan/{hasilPemeriksaan}', [HasilPemeriksaanController::class, 'destroy'])->name('hasil-pemeriksaan.destroy');
 
     // Jira Integration Routes
     Route::prefix('jira')->group(function () {
