@@ -11,6 +11,7 @@ use App\Http\Controllers\JadwalController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\InsightController;
 use App\Http\Controllers\TargetKesehatanController;
+use App\Http\Controllers\HasilPemeriksaanController;
 
 Route::get('/', function () {
     return redirect('/login');
@@ -51,7 +52,11 @@ Route::middleware('auth')->group(function () {
     // PKE-15: Insight & Pencapaian
     Route::get('/insight',            [InsightController::class, 'index'])->name('insight.index');
     Route::get('/insight/progress',   fn() => view('coming-soon', ['title' => 'Progress']))->name('insight.progress');
-    Route::get('/hasil-pemeriksaan',  fn() => view('coming-soon', ['title' => 'Hasil Pemeriksaan']))->name('hasil-pemeriksaan.index');
+    // PKE-11: Pencatatan Hasil Pemeriksaan
+    Route::get('/hasil-pemeriksaan',                       [HasilPemeriksaanController::class, 'index'])->name('hasil-pemeriksaan.index');
+    Route::post('/hasil-pemeriksaan',                      [HasilPemeriksaanController::class, 'store'])->name('hasil-pemeriksaan.store');
+    Route::put('/hasil-pemeriksaan/{hasilPemeriksaan}',    [HasilPemeriksaanController::class, 'update'])->name('hasil-pemeriksaan.update');
+    Route::delete('/hasil-pemeriksaan/{hasilPemeriksaan}', [HasilPemeriksaanController::class, 'destroy'])->name('hasil-pemeriksaan.destroy');
     // PKE-16: Target Kesehatan
     Route::resource('/target-kesehatan', TargetKesehatanController::class, [
         'parameters' => ['target-kesehatan' => 'target'],
