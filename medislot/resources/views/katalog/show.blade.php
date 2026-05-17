@@ -1,8 +1,8 @@
 @extends('layouts.app')
 
-@section('title', $item['nama'] . ' - Katalog MEDISLOT')
+@section('title', $item->nama . ' - Katalog MEDISLOT')
 @section('page-title', 'Detail Pemeriksaan')
-@section('page-subtitle', $item['kategori'])
+@section('page-subtitle', $item->kategori)
 
 @section('topbar-actions')
     <a href="{{ route('katalog.index') }}"
@@ -16,7 +16,6 @@
 <style>
     .detail-wrap { max-width: 720px; }
 
-    /* ── HEADER CARD ── */
     .detail-header {
         background: #fff;
         border-radius: 16px;
@@ -48,7 +47,6 @@
         border-radius: 20px;
     }
 
-    /* ── SECTION CARD ── */
     .detail-card {
         background: #fff;
         border-radius: 14px;
@@ -73,12 +71,7 @@
         margin: 0;
     }
 
-    /* ── PERSIAPAN LIST ── */
-    .persiapan-list {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-    }
+    .persiapan-list { display: flex; flex-direction: column; gap: 10px; }
     .persiapan-item {
         display: flex;
         align-items: flex-start;
@@ -99,7 +92,6 @@
         margin-top: 1px;
     }
 
-    /* ── BIAYA ── */
     .biaya-wrap {
         display: flex;
         align-items: center;
@@ -116,9 +108,7 @@
         color: #7a9a90;
         margin-top: 4px;
     }
-    .durasi-box {
-        text-align: right;
-    }
+    .durasi-box { text-align: right; }
     .durasi-val {
         font-size: 16px;
         font-weight: 700;
@@ -130,7 +120,6 @@
         margin-top: 2px;
     }
 
-    /* ── CTA BUTTON ── */
     .btn-reminder {
         display: inline-flex;
         align-items: center;
@@ -150,7 +139,6 @@
     }
     .btn-reminder:hover { background: #258a62; color: #fff; }
 
-    /* ── TOAST ── */
     #toast {
         position: fixed;
         bottom: 28px; right: 28px;
@@ -177,36 +165,38 @@
 @section('content')
 <div class="detail-wrap">
 
-    {{-- HEADER --}}
     <div class="detail-header">
         <div class="detail-icon"
-             style="background: {{ $item['bg_color'] }}; color: {{ $item['icon_color'] }};">
-            <i class="fas {{ $item['icon'] }}"></i>
+             style="background: {{ $item->bg_color }}; color: {{ $item->icon_color }};">
+            <i class="fas {{ $item->icon }}"></i>
         </div>
         <div class="detail-header-info">
-            <h2>{{ $item['nama'] }}</h2>
+            <h2>{{ $item->nama }}</h2>
             <div class="detail-meta">
                 <span class="meta-badge" style="background:#e8f5f0; color:#1a7a58;">
-                    <i class="fas fa-tag" style="font-size:10px;"></i>{{ $item['kategori'] }}
+                    <i class="fas fa-tag" style="font-size:10px;"></i>{{ $item->kategori }}
                 </span>
+                @if($item->durasi)
                 <span class="meta-badge" style="background:#f0f4f3; color:#5a7a70;">
-                    <i class="fas fa-clock" style="font-size:10px;"></i>{{ $item['durasi'] }}
+                    <i class="fas fa-clock" style="font-size:10px;"></i>{{ $item->durasi }}
                 </span>
+                @endif
             </div>
         </div>
     </div>
 
-    {{-- DESKRIPSI --}}
+    @if($item->deskripsi)
     <div class="detail-card">
         <h3><i class="fas fa-info-circle"></i>Tentang Pemeriksaan Ini</h3>
-        <p>{{ $item['deskripsi'] }}</p>
+        <p>{{ $item->deskripsi }}</p>
     </div>
+    @endif
 
-    {{-- PERSIAPAN --}}
+    @if($item->persiapan && count($item->persiapan) > 0)
     <div class="detail-card">
         <h3><i class="fas fa-clipboard-list"></i>Persiapan Sebelum Pemeriksaan</h3>
         <div class="persiapan-list">
-            @foreach($item['persiapan'] as $i => $prep)
+            @foreach($item->persiapan as $i => $prep)
             <div class="persiapan-item">
                 <div class="persiapan-num">{{ $i + 1 }}</div>
                 <span>{{ $prep }}</span>
@@ -214,37 +204,39 @@
             @endforeach
         </div>
     </div>
+    @endif
 
-    {{-- ESTIMASI BIAYA --}}
+    @if($item->biaya_min || $item->biaya_max)
     <div class="detail-card">
         <h3><i class="fas fa-wallet"></i>Estimasi Biaya</h3>
         <div class="biaya-wrap">
             <div>
                 <div class="biaya-range">
-                    Rp {{ number_format($item['biaya_min'], 0, ',', '.') }}
-                    – Rp {{ number_format($item['biaya_max'], 0, ',', '.') }}
+                    Rp {{ number_format($item->biaya_min, 0, ',', '.') }}
+                    – Rp {{ number_format($item->biaya_max, 0, ',', '.') }}
                 </div>
                 <div class="biaya-note">
                     * Estimasi biaya dapat berbeda tergantung fasilitas kesehatan
                 </div>
             </div>
+            @if($item->durasi)
             <div class="durasi-box">
-                <div class="durasi-val">{{ $item['durasi'] }}</div>
+                <div class="durasi-val">{{ $item->durasi }}</div>
                 <div class="durasi-label">Estimasi durasi</div>
             </div>
+            @endif
         </div>
     </div>
+    @endif
 
-    {{-- CTA --}}
     <button class="btn-reminder"
-        onclick="setReminder('{{ $item['key'] }}', '{{ $item['nama'] }}')">
+        onclick="setReminder('{{ $item->slug }}', '{{ addslashes($item->nama) }}')">
         <i class="fas fa-bell"></i>
         Buat Pengingat untuk Pemeriksaan Ini
     </button>
 
 </div>
 
-{{-- TOAST --}}
 <div id="toast">
     <div class="t-top"><i class="fas fa-check-circle"></i><span id="t-title"></span></div>
     <div class="t-sub" id="t-sub"></div>
@@ -253,32 +245,24 @@
 
 @section('scripts')
 <script>
-function setReminder(key, name) {
+function setReminder(slug, name) {
     const STORAGE_KEY = 'medislot_reminders';
-    const intervals   = {
-        'ekg': 180, 'ekokardiografi': 365, 'fisik-umum': 365,
-        'scaling': 180, 'endoskopi-tht': 365, 'visus-mata': 365,
-        'glaukoma': 365, 'darah-lengkap': 365, 'gula-kolesterol': 180,
-        'dermatologi': 365, 'usg-abdomen': 365, 'rontgen': 365,
-    };
-    const days   = intervals[key] || 365;
     const today  = new Date();
     const target = new Date(today);
-    target.setDate(today.getDate() + days);
+    target.setDate(today.getDate() + 365);
 
-    const months   = ['Januari','Februari','Maret','April','Mei','Juni',
-                      'Juli','Agustus','September','Oktober','November','Desember'];
+    const months  = ['Januari','Februari','Maret','April','Mei','Juni',
+                     'Juli','Agustus','September','Oktober','November','Desember'];
     const dateStr  = target.toISOString().split('T')[0];
     const dateDisp = `${target.getDate()} ${months[target.getMonth()]} ${target.getFullYear()}`;
 
     const reminders = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-    reminders[key]  = { targetDate: dateStr, name };
+    reminders[slug] = { targetDate: dateStr, name };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(reminders));
 
-    const diffDays = Math.ceil((target - today) / (1000 * 60 * 60 * 24));
     document.getElementById('t-title').textContent = `Pengingat "${name}" aktif!`;
     document.getElementById('t-sub').textContent   =
-        `Check-up berikutnya: ${dateDisp} — ${diffDays} hari lagi`;
+        `Check-up berikutnya: ${dateDisp}`;
 
     const toast = document.getElementById('toast');
     toast.classList.add('show');

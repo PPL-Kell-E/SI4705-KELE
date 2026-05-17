@@ -6,7 +6,6 @@
 
 @section('extra-styles')
 <style>
-    /* ── SEARCH BAR ── */
     .search-wrap {
         display: flex;
         gap: 12px;
@@ -53,7 +52,6 @@
     }
     .btn-search:hover { background: #258a62; }
 
-    /* ── FILTER CHIPS ── */
     .filter-chips {
         display: flex;
         gap: 8px;
@@ -71,6 +69,8 @@
         background: #fff;
         color: #5a7a70;
         transition: all 0.18s;
+        text-decoration: none;
+        display: inline-block;
     }
     .chip:hover, .chip.active {
         background: #2d9e72;
@@ -78,7 +78,6 @@
         color: #fff;
     }
 
-    /* ── RESULT INFO ── */
     .result-info {
         font-size: 13px;
         color: #7a9a90;
@@ -86,7 +85,6 @@
     }
     .result-info span { font-weight: 700; color: #1a3c34; }
 
-    /* ── GRID ── */
     .katalog-grid {
         display: grid;
         grid-template-columns: repeat(2, 1fr);
@@ -94,7 +92,6 @@
         max-width: 860px;
     }
 
-    /* ── CARD ── */
     .katalog-card {
         background: #fff;
         border-radius: 14px;
@@ -145,7 +142,6 @@
         margin-bottom: 5px;
     }
 
-    /* ── EMPTY STATE ── */
     .empty-state {
         grid-column: 1 / -1;
         text-align: center;
@@ -154,15 +150,12 @@
     }
     .empty-state i { font-size: 40px; margin-bottom: 12px; opacity: 0.4; }
     .empty-state p { font-size: 14px; }
-    .empty-state a {
-        color: #2d9e72; font-weight: 600; text-decoration: none;
-    }
+    .empty-state a { color: #2d9e72; font-weight: 600; text-decoration: none; }
 </style>
 @endsection
 
 @section('content')
 
-{{-- SEARCH BAR (FR-11) --}}
 <form action="{{ route('katalog.index') }}" method="GET">
     <div class="search-wrap">
         <div class="search-box">
@@ -180,47 +173,42 @@
         </button>
     </div>
 
-    {{-- FILTER CHIPS by kategori --}}
     <div class="filter-chips">
-        <span class="chip {{ !$query ? 'active' : '' }}"
-              onclick="window.location='{{ route('katalog.index') }}'">Semua</span>
+        <a href="{{ route('katalog.index') }}" class="chip {{ !$query && !$kategori ? 'active' : '' }}">Semua</a>
         @foreach($kategoriList as $kat)
-            <span class="chip {{ $query === strtolower($kat) ? 'active' : '' }}"
-                  onclick="document.querySelector('[name=q]').value='{{ $kat }}'; this.closest('form').submit()">
-                {{ $kat }}
-            </span>
+            <a href="{{ route('katalog.index', ['kategori' => $kat]) }}"
+               class="chip {{ $kategori === $kat ? 'active' : '' }}">{{ $kat }}</a>
         @endforeach
     </div>
 </form>
 
-{{-- RESULT INFO --}}
 <div class="result-info">
-    @if($query)
-        Menampilkan <span>{{ count($katalog) }}</span> hasil untuk
-        "<span>{{ $query }}</span>"
+    @if($query || $kategori)
+        Menampilkan <span>{{ $katalog->count() }}</span> hasil
+        @if($query) untuk "<span>{{ $query }}</span>" @endif
+        @if($kategori) dalam kategori "<span>{{ $kategori }}</span>" @endif
     @else
-        Menampilkan <span>{{ count($katalog) }}</span> jenis pemeriksaan
+        Menampilkan <span>{{ $katalog->count() }}</span> jenis pemeriksaan
     @endif
 </div>
 
-{{-- GRID (FR-10) --}}
 <div class="katalog-grid">
     @forelse($katalog as $item)
-        <a href="{{ route('katalog.show', $item['key']) }}" class="katalog-card">
+        <a href="{{ route('katalog.show', $item->slug) }}" class="katalog-card">
             <div class="card-icon"
-                 style="background: {{ $item['bg_color'] }}; color: {{ $item['icon_color'] }};">
-                <i class="fas {{ $item['icon'] }}"></i>
+                 style="background: {{ $item->bg_color }}; color: {{ $item->icon_color }};">
+                <i class="fas {{ $item->icon }}"></i>
             </div>
             <div class="card-body">
-                <div class="card-kategori">{{ $item['kategori'] }}</div>
-                <h3>{{ $item['nama'] }}</h3>
-                <p>{{ $item['singkat'] }}</p>
+                <div class="card-kategori">{{ $item->kategori }}</div>
+                <h3>{{ $item->nama }}</h3>
+                <p>{{ $item->singkat }}</p>
             </div>
         </a>
     @empty
         <div class="empty-state">
             <div><i class="fas fa-search-minus"></i></div>
-            <p>Tidak ada pemeriksaan yang cocok dengan "<strong>{{ $query }}</strong>".<br>
+            <p>Tidak ada pemeriksaan yang cocok.<br>
             <a href="{{ route('katalog.index') }}">Lihat semua pemeriksaan</a></p>
         </div>
     @endforelse

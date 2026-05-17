@@ -12,6 +12,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\InsightController;
 use App\Http\Controllers\TargetKesehatanController;
 use App\Http\Controllers\HasilPemeriksaanController;
+use App\Http\Controllers\AdminController;
 
 Route::get('/', function () {
     return redirect('/login');
@@ -25,7 +26,12 @@ Route::middleware('guest')->group(function () {
 });
 
 Route::middleware('auth')->group(function () {
-    // Dashboard
+    // Admin area
+    Route::middleware('is_admin')->prefix('admin')->name('admin.')->group(function () {
+        Route::get('/', [AdminController::class, 'index'])->name('index');
+    });
+
+    // Dashboard (user biasa)
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     // PKE-1: Pengelolaan Profil (PKE-22: Lihat, PKE-23: Ubah)
@@ -44,7 +50,13 @@ Route::middleware('auth')->group(function () {
     Route::post('/data-kesehatan',        [HealthDataController::class, 'store'])->name('data-kesehatan.store');
     Route::get('/data-kesehatan/export',  [HealthDataController::class, 'export'])->name('data-kesehatan.export');
     Route::get('/katalog',             [KatalogController::class, 'index'])->name('katalog.index');
-    Route::get('/katalog/{key}',       [KatalogController::class, 'show'])->name('katalog.show');
+    Route::get('/katalog/{slug}',      [KatalogController::class, 'show'])->name('katalog.show');
+    // PKE-9: Admin CRUD Katalog
+    Route::middleware('is_admin')->group(function () {
+        Route::post('/katalog',             [KatalogController::class, 'store'])->name('katalog.store');
+        Route::put('/katalog/{katalog}',    [KatalogController::class, 'update'])->name('katalog.update');
+        Route::delete('/katalog/{katalog}', [KatalogController::class, 'destroy'])->name('katalog.destroy');
+    });
     // PKE-5: Perencanaan Jadwal Pemeriksaan
     Route::resource('/jadwal', JadwalController::class)->except(['show']);
     Route::patch('/jadwal/{jadwal}/selesai', [JadwalController::class, 'tandaiSelesai'])->name('jadwal.selesai');
