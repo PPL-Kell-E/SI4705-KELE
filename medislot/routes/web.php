@@ -8,7 +8,9 @@ use App\Http\Controllers\RecommendationController;
 use App\Http\Controllers\KatalogController;
 use App\Http\Controllers\HealthDataController;
 use App\Http\Controllers\JadwalController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\InsightController;
+use App\Http\Controllers\TargetKesehatanController;
 
 Route::get('/', function () {
     return redirect('/login');
@@ -50,6 +52,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/insight',            [InsightController::class, 'index'])->name('insight.index');
     Route::get('/insight/progress',   fn() => view('coming-soon', ['title' => 'Progress']))->name('insight.progress');
     Route::get('/hasil-pemeriksaan',  fn() => view('coming-soon', ['title' => 'Hasil Pemeriksaan']))->name('hasil-pemeriksaan.index');
+    // PKE-16: Target Kesehatan
+    Route::resource('/target-kesehatan', TargetKesehatanController::class, [
+        'parameters' => ['target-kesehatan' => 'target'],
+    ])->except(['show']);
 
     // Jira Integration Routes
     Route::prefix('jira')->group(function () {

@@ -176,7 +176,7 @@
         <a href="{{ route('riwayat.index') }}" class="nav-item {{ request()->routeIs('riwayat.*') ? 'active' : '' }}">
             <i class="fas fa-history"></i> Riwayat
         </a>
-        @php $insightOpen = request()->routeIs('insight.*'); @endphp
+        @php $insightOpen = request()->routeIs('insight.*') || request()->routeIs('target-kesehatan.*'); @endphp
         <a href="#" class="nav-item {{ $insightOpen ? 'open' : '' }}" onclick="toggleInsightMenu(event)">
             <i class="fas fa-lightbulb"></i> Insight
             <i class="fas fa-chevron-down nav-arrow"></i>
@@ -187,6 +187,9 @@
             </a>
             <a href="{{ route('insight.index') }}" class="nav-sub-item {{ request()->routeIs('insight.index') ? 'active' : '' }}">
                 <span class="dot"></span> Insight &amp; Pencapaian
+            </a>
+            <a href="{{ route('target-kesehatan.index') }}" class="nav-sub-item {{ request()->routeIs('target-kesehatan.*') ? 'active' : '' }}">
+                <span class="dot"></span> Target Kesehatan
             </a>
         </div>
         <a href="{{ route('hasil-pemeriksaan.index') }}" class="nav-item {{ request()->routeIs('hasil-pemeriksaan.*') ? 'active' : '' }}">
