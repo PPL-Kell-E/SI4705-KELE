@@ -7,6 +7,7 @@ use App\Http\Controllers\JiraController;
 use App\Http\Controllers\RecommendationController;
 use App\Http\Controllers\KatalogController;
 use App\Http\Controllers\HealthDataController;
+use App\Http\Controllers\TargetKesehatanController;
 
 Route::get('/', function () {
     return redirect('/login');
@@ -29,7 +30,6 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile',  [ProfileController::class, 'show'])->name('profile.show');
     Route::put('/profile',  [ProfileController::class, 'update'])->name('profile.update');
 
-    // Stub routes for sidebar (to be implemented per sprint)
     Route::get('/pengingat',          fn() => view('coming-soon', ['title' => 'Pengingat']))->name('pengingat.index');
     Route::get('/rekomendasi',        [RecommendationController::class, 'index'])->name('rekomendasi.index');
     // PKE-2: Data Kesehatan Dasar
@@ -41,6 +41,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/jadwal',             fn() => view('coming-soon', ['title' => 'Jadwal Saya']))->name('jadwal.index');
     Route::get('/riwayat',            fn() => view('coming-soon', ['title' => 'Riwayat']))->name('riwayat.index');
     Route::get('/insight',            fn() => view('coming-soon', ['title' => 'Insight']))->name('insight.index');
+    Route::get('/insight/progress',   fn() => view('coming-soon', ['title' => 'Progress']))->name('insight.progress');
+    // PKE-16: Target Kesehatan
+    Route::resource('/target-kesehatan', TargetKesehatanController::class, [
+        'parameters' => ['target-kesehatan' => 'target'],
+    ])->except(['show']);
     Route::get('/hasil-pemeriksaan',  fn() => view('coming-soon', ['title' => 'Hasil Pemeriksaan']))->name('hasil-pemeriksaan.index');
 
     // Jira Integration Routes

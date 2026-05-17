@@ -159,9 +159,22 @@
         <a href="{{ route('riwayat.index') }}" class="nav-item {{ request()->routeIs('riwayat.*') ? 'active' : '' }}">
             <i class="fas fa-history"></i> Riwayat
         </a>
-        <a href="{{ route('insight.index') }}" class="nav-item {{ request()->routeIs('insight.*') ? 'active' : '' }}">
+        @php $insightOpen = request()->routeIs('insight.*') || request()->routeIs('target-kesehatan.*'); @endphp
+        <a href="#" class="nav-item {{ $insightOpen ? 'open' : '' }}" onclick="toggleInsightMenu(event)">
             <i class="fas fa-chart-line"></i> Insight
+            <i class="fas fa-chevron-down nav-arrow"></i>
         </a>
+        <div class="nav-submenu {{ $insightOpen ? 'open' : '' }}" id="insight-submenu">
+            <a href="{{ route('insight.progress') }}" class="nav-sub-item {{ request()->routeIs('insight.progress') ? 'active' : '' }}">
+                <span class="dot"></span> Progress
+            </a>
+            <a href="{{ route('insight.index') }}" class="nav-sub-item {{ request()->routeIs('insight.index') ? 'active' : '' }}">
+                <span class="dot"></span> Insight &amp; Pencapaian
+            </a>
+            <a href="{{ route('target-kesehatan.index') }}" class="nav-sub-item {{ request()->routeIs('target-kesehatan.*') ? 'active' : '' }}">
+                <span class="dot"></span> Target Kesehatan
+            </a>
+        </div>
         <a href="{{ route('hasil-pemeriksaan.index') }}" class="nav-item {{ request()->routeIs('hasil-pemeriksaan.*') ? 'active' : '' }}">
             <i class="fas fa-file-medical-alt"></i> Hasil Pemeriksaan
         </a>
@@ -205,5 +218,14 @@
 </div>
 
 @yield('scripts')
+<script>
+function toggleInsightMenu(e) {
+    e.preventDefault();
+    const btn = e.currentTarget;
+    const sub = document.getElementById('insight-submenu');
+    btn.classList.toggle('open');
+    sub.classList.toggle('open');
+}
+</script>
 </body>
 </html>
