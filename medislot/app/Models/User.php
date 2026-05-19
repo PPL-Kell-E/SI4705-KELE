@@ -54,4 +54,14 @@ class User extends Authenticatable
     {
         return $this->password_hash;
     }
+
+    public function hasilPemeriksaan()
+    {
+        return $this->hasMany(HasilPemeriksaan::class);
+    }
+
+    public function jadwal()
+    {
+        return $this->hasMany(Jadwal::class);
+    }
 }

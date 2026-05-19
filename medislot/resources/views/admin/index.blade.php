@@ -1,198 +1,476 @@
 @extends('layouts.admin')
 
 @section('title', 'Dashboard Admin - MEDISLOT')
-@section('page-title', 'Dashboard Admin')
-@section('page-subtitle', 'Ringkasan data sistem MediSlot')
+@section('page-title', 'Hello, {{ Auth::user()->full_name ?? "Admin" }}')
+@section('page-subtitle', 'Selamat datang di dashboard admin Medislot')
 
 @section('extra-styles')
 <style>
-    .stat-grid {
+    /* ── Stat Cards ── */
+    .stat-row {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 16px;
-        margin-bottom: 28px;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 18px;
+        margin-bottom: 24px;
     }
     .stat-card {
         background: #fff;
-        border-radius: 14px;
-        padding: 22px 24px;
+        border-radius: 16px;
+        padding: 24px 28px;
         box-shadow: 0 1px 6px rgba(0,0,0,0.06);
         display: flex;
         align-items: center;
-        gap: 16px;
+        gap: 20px;
+        transition: box-shadow 0.18s;
     }
-    .stat-icon {
-        width: 52px; height: 52px;
-        border-radius: 14px;
+    .stat-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.09); }
+    .stat-icon-wrap {
+        width: 60px; height: 60px; border-radius: 16px;
         display: flex; align-items: center; justify-content: center;
-        font-size: 22px;
-        flex-shrink: 0;
+        font-size: 26px; flex-shrink: 0;
     }
-    .stat-info { flex: 1; }
+    .stat-info { flex: 1; min-width: 0; }
     .stat-value {
-        font-size: 28px;
-        font-weight: 800;
-        color: #1a3c34;
-        line-height: 1;
-        margin-bottom: 4px;
+        font-size: 32px; font-weight: 800;
+        color: #2d9e72; line-height: 1; margin-bottom: 6px;
     }
-    .stat-label {
-        font-size: 12.5px;
-        color: #7a9a90;
-        font-weight: 500;
+    .stat-label { font-size: 13px; font-weight: 600; color: #1a3c34; margin-bottom: 2px; }
+    .stat-sub   { font-size: 12px; color: #7a9a90; }
+
+    /* ── Two-column ── */
+    .dash-grid {
+        display: grid;
+        grid-template-columns: 1fr 420px;
+        gap: 20px;
+        align-items: start;
     }
 
-    .section-card {
+    .panel {
         background: #fff;
-        border-radius: 14px;
+        border-radius: 16px;
         padding: 24px 28px;
         box-shadow: 0 1px 6px rgba(0,0,0,0.06);
     }
-    .section-card h3 {
-        font-size: 15px;
-        font-weight: 700;
-        color: #1a3c34;
-        margin-bottom: 18px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
+    .panel-header {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 20px;
     }
-    .section-card h3 i { color: #2d9e72; }
-
-    table { width: 100%; border-collapse: collapse; }
-    thead th {
-        font-size: 12px; font-weight: 600; color: #7a9a90;
-        text-align: left; padding: 0 0 12px; border-bottom: 1px solid #eef2f1;
+    .panel-title {
+        font-size: 15px; font-weight: 700; color: #1a3c34;
     }
-    tbody tr { border-bottom: 1px solid #f5f8f7; }
-    tbody tr:last-child { border-bottom: none; }
-    tbody td { padding: 12px 0; font-size: 14px; color: #333; vertical-align: middle; }
+    .panel-title span { color: #7a9a90; font-weight: 400; font-size: 13px; margin-left: 6px; }
 
-    .item-icon-sm {
-        width: 32px; height: 32px; border-radius: 8px;
+    /* ── Chart ── */
+    .chart-wrap { position: relative; height: 260px; }
+    .chart-error {
+        height: 260px; display: flex; align-items: center; justify-content: center;
+        color: #7a9a90; font-size: 14px; gap: 8px;
+    }
+    .year-select {
+        padding: 6px 12px; border-radius: 8px;
+        border: 1.5px solid #d0ddd9; font-size: 13px;
+        color: #1a3c34; font-family: inherit; outline: none;
+        cursor: pointer; background: #f8fbfa;
+        transition: border-color 0.18s;
+    }
+    .year-select:focus { border-color: #2d9e72; }
+
+    /* ── Search ── */
+    .search-wrap {
+        position: relative; width: 200px;
+    }
+    .search-wrap i {
+        position: absolute; left: 11px; top: 50%;
+        transform: translateY(-50%);
+        color: #7a9a90; font-size: 13px; pointer-events: none;
+    }
+    .search-wrap input {
+        width: 100%; padding: 8px 12px 8px 32px;
+        border: 1.5px solid #d0ddd9; border-radius: 8px;
+        font-size: 13px; color: #333; font-family: inherit;
+        outline: none; transition: border-color 0.18s;
+        background: #f8fbfa;
+    }
+    .search-wrap input:focus { border-color: #2d9e72; background: #fff; }
+
+    /* ── User Table ── */
+    .user-table { width: 100%; border-collapse: collapse; }
+    .user-table thead th {
+        font-size: 12px; font-weight: 700; color: #7a9a90;
+        text-align: left; padding: 0 0 10px;
+        border-bottom: 1px solid #eef2f1;
+        text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .user-table tbody tr {
+        border-bottom: 1px solid #f5f8f7;
+        transition: background 0.12s;
+    }
+    .user-table tbody tr:last-child { border-bottom: none; }
+    .user-table tbody tr:hover { background: #f8fbfa; }
+    .user-table td { padding: 11px 0; font-size: 13.5px; color: #333; vertical-align: middle; }
+
+    .user-avatar {
+        width: 34px; height: 34px; border-radius: 50%;
         display: flex; align-items: center; justify-content: center;
-        font-size: 14px; margin-right: 10px; flex-shrink: 0;
+        font-size: 13px; font-weight: 700; color: #fff;
+        flex-shrink: 0; margin-right: 10px;
     }
-    .name-cell { display: flex; align-items: center; }
-    .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11.5px; font-weight: 600; }
-    .badge-aktif    { background: #d4edda; color: #155724; }
-    .badge-nonaktif { background: #fde8e8; color: #a52020; }
+    .user-name-cell { display: flex; align-items: center; }
+    .user-name { font-weight: 600; color: #1a3c34; font-size: 13.5px; }
+    .user-email { font-size: 12px; color: #7a9a90; }
 
-    .quick-link {
-        display: flex; align-items: center; gap: 12px;
-        padding: 16px; border-radius: 12px;
-        background: #f8fbfa; border: 1.5px solid #e8f0ee;
-        text-decoration: none; color: #1a3c34;
-        font-weight: 600; font-size: 14px;
-        transition: all 0.18s; margin-bottom: 10px;
+    .badge-count {
+        display: inline-flex; align-items: center; justify-content: center;
+        min-width: 28px; padding: 3px 10px;
+        background: #e8f5f0; color: #1a7a54;
+        border-radius: 999px; font-size: 12.5px; font-weight: 600;
     }
-    .quick-link:last-child { margin-bottom: 0; }
-    .quick-link:hover { background: #e8f5f0; border-color: #2d9e72; }
-    .quick-link i { color: #2d9e72; font-size: 18px; width: 24px; text-align: center; }
 
-    .two-col { display: grid; grid-template-columns: 1fr 340px; gap: 20px; }
+    /* ── Pagination ── */
+    .pagination-row {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-top: 16px; padding-top: 14px;
+        border-top: 1px solid #eef2f1;
+        flex-wrap: wrap; gap: 10px;
+    }
+    .pagination-info { font-size: 12.5px; color: #7a9a90; }
+    .pagination-pages { display: flex; align-items: center; gap: 4px; }
+    .page-btn {
+        width: 30px; height: 30px; border-radius: 7px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 13px; font-weight: 500; color: #5a7a70;
+        border: 1.5px solid #e0e8e5; background: #fff;
+        cursor: pointer; text-decoration: none;
+        transition: all 0.15s;
+    }
+    .page-btn:hover   { border-color: #2d9e72; color: #1a3c34; }
+    .page-btn.active  { background: #1a3c34; color: #fff; border-color: #1a3c34; }
+    .page-btn.dots    { border: none; background: none; cursor: default; color: #7a9a90; }
+
+    /* ── Per-page select ── */
+    .per-page-select {
+        padding: 5px 10px; border-radius: 8px;
+        border: 1.5px solid #d0ddd9; font-size: 12.5px;
+        color: #333; font-family: inherit; outline: none;
+        background: #f8fbfa; cursor: pointer;
+    }
+    .per-page-select:focus { border-color: #2d9e72; }
+
+    /* ── Empty / Error states ── */
+    .empty-row td {
+        text-align: center; padding: 40px 0;
+        color: #7a9a90; font-size: 14px;
+    }
+    .empty-row i { font-size: 36px; display: block; margin-bottom: 10px; color: #c8ddd7; }
+    .alert-error {
+        background: #fee2e2; color: #b91c1c;
+        padding: 14px 18px; border-radius: 10px;
+        font-size: 13.5px; margin-bottom: 20px;
+        display: flex; align-items: center; gap: 10px;
+    }
+
+    /* ── Loading skeleton ── */
+    @keyframes shimmer {
+        0%   { background-position: -600px 0; }
+        100% { background-position: 600px 0; }
+    }
+    .skeleton {
+        background: linear-gradient(90deg, #f0f4f3 25%, #e0ebe8 50%, #f0f4f3 75%);
+        background-size: 600px 100%;
+        animation: shimmer 1.4s infinite;
+        border-radius: 6px;
+    }
 </style>
 @endsection
 
 @section('content')
 
-{{-- STAT CARDS --}}
-<div class="stat-grid">
+@if(isset($error) && $error)
+<div class="alert-error">
+    <i class="fas fa-exclamation-circle"></i> {{ $error }}
+</div>
+@endif
+
+{{-- ── STAT CARDS ── --}}
+<div class="stat-row">
     <div class="stat-card">
-        <div class="stat-icon" style="background:#e8f5f0; color:#2d9e72;">
-            <i class="fas fa-book-medical"></i>
+        <div class="stat-icon-wrap" style="background:#e8f5f0;">
+            <i class="fas fa-users" style="color:#2d9e72;"></i>
         </div>
         <div class="stat-info">
-            <div class="stat-value">{{ $totalKatalog }}</div>
-            <div class="stat-label">Total Katalog</div>
-        </div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-icon" style="background:#d4edda; color:#155724;">
-            <i class="fas fa-check-circle"></i>
-        </div>
-        <div class="stat-info">
-            <div class="stat-value">{{ $katalogAktif }}</div>
-            <div class="stat-label">Katalog Aktif</div>
-        </div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-icon" style="background:#e8f0f5; color:#3a7abf;">
-            <i class="fas fa-users"></i>
-        </div>
-        <div class="stat-info">
-            <div class="stat-value">{{ $totalUser }}</div>
+            <div class="stat-value">{{ number_format($totalUser) }}</div>
             <div class="stat-label">Total Pengguna</div>
+            <div class="stat-sub">Semua pengguna terdaftar</div>
         </div>
     </div>
+
     <div class="stat-card">
-        <div class="stat-icon" style="background:#f5f0e8; color:#bf8a3a;">
-            <i class="fas fa-tags"></i>
+        <div class="stat-icon-wrap" style="background:#e8f0ff;">
+            <i class="fas fa-calendar-check" style="color:#4f73d9;"></i>
         </div>
         <div class="stat-info">
-            <div class="stat-value">{{ $kategoriCount }}</div>
-            <div class="stat-label">Kategori</div>
+            <div class="stat-value" style="color:#4f73d9;">{{ number_format($totalJadwal) }}</div>
+            <div class="stat-label">Total Jadwal Pemeriksaan</div>
+            <div class="stat-sub">Semua jadwal yang dibuat</div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon-wrap" style="background:#eef0ff;">
+            <i class="fas fa-heartbeat" style="color:#7c6fd4;"></i>
+        </div>
+        <div class="stat-info">
+            <div class="stat-value" style="color:#7c6fd4;">{{ number_format($aktifBulanIni) }}</div>
+            <div class="stat-label">Pengguna Aktif Bulan Ini</div>
+            <div class="stat-sub">Aktif dalam 30 hari terakhir</div>
         </div>
     </div>
 </div>
 
-<div class="two-col">
-    {{-- KATALOG TERBARU --}}
-    <div class="section-card">
-        <h3><i class="fas fa-clock"></i>Katalog Terbaru</h3>
-        <table>
+{{-- ── MAIN PANELS ── --}}
+<div class="dash-grid">
+
+    {{-- Chart Panel --}}
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title">Pemeriksaan Bulanan <span>Jumlah jadwal per bulan</span></div>
+            <form method="GET" action="{{ route('admin.index') }}" id="yearForm" style="display:flex;gap:8px;align-items:center;">
+                <input type="hidden" name="search" value="{{ $search }}">
+                <input type="hidden" name="per_page" value="{{ $perPage }}">
+                <select name="tahun" class="year-select" onchange="document.getElementById('yearForm').submit()">
+                    @foreach($availableYears as $y)
+                        <option value="{{ $y }}" {{ $tahun === $y ? 'selected' : '' }}>
+                            {{ $y === now()->year ? 'Tahun Ini' : $y }}
+                        </option>
+                    @endforeach
+                </select>
+            </form>
+        </div>
+
+        @if(isset($error) && $error)
+        <div class="chart-error">
+            <i class="fas fa-exclamation-triangle"></i>
+            Grafik gagal dimuat.
+        </div>
+        @else
+        <div class="chart-wrap">
+            <canvas id="monthlyChart"></canvas>
+        </div>
+        @endif
+    </div>
+
+    {{-- User List Panel --}}
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title">Daftar Pengguna</div>
+            <form method="GET" action="{{ route('admin.index') }}" id="searchForm">
+                <input type="hidden" name="tahun" value="{{ $tahun }}">
+                <input type="hidden" name="per_page" value="{{ $perPage }}">
+                <div class="search-wrap">
+                    <i class="fas fa-search"></i>
+                    <input type="text" name="search" value="{{ $search }}"
+                           placeholder="Cari pengguna..."
+                           oninput="debounceSearch(this.form)">
+                </div>
+            </form>
+        </div>
+
+        <table class="user-table">
             <thead>
                 <tr>
-                    <th>Nama Pemeriksaan</th>
-                    <th>Kategori</th>
-                    <th>Status</th>
+                    <th style="width:36px">No</th>
+                    <th>Nama</th>
+                    <th>Email</th>
+                    <th style="text-align:right">Pemeriksaan</th>
                 </tr>
             </thead>
             <tbody>
-                @foreach($katalogTerbaru as $item)
-                <tr>
-                    <td>
-                        <div class="name-cell">
-                            <div class="item-icon-sm" style="background:{{ $item->bg_color }};color:{{ $item->icon_color }};">
-                                <i class="fas {{ $item->icon }}"></i>
-                            </div>
-                            <span style="font-weight:600;color:#1a3c34;">{{ $item->nama }}</span>
-                        </div>
+                @if($users instanceof \Illuminate\Pagination\LengthAwarePaginator ? $users->isEmpty() : $users->isEmpty())
+                <tr class="empty-row">
+                    <td colspan="4">
+                        @if($search)
+                            <i class="fas fa-search"></i>
+                            Pengguna tidak ditemukan untuk "<strong>{{ $search }}</strong>"
+                        @else
+                            <i class="fas fa-users-slash"></i>
+                            Belum ada data pengguna.
+                        @endif
                     </td>
-                    <td style="color:#7a9a90;">{{ $item->kategori }}</td>
-                    <td><span class="badge badge-{{ $item->status }}">{{ $item->status === 'aktif' ? 'Aktif' : 'Nonaktif' }}</span></td>
                 </tr>
-                @endforeach
+                @else
+                    @php
+                        $colors = ['#2d9e72','#4f73d9','#e05252','#f59e0b','#7c6fd4','#0ea5e9','#ec4899','#14b8a6'];
+                        $offset = ($users instanceof \Illuminate\Pagination\LengthAwarePaginator)
+                            ? ($users->currentPage() - 1) * $users->perPage()
+                            : 0;
+                    @endphp
+                    @foreach($users as $i => $u)
+                    <tr>
+                        <td style="color:#7a9a90;font-size:12.5px;">{{ $offset + $loop->iteration }}</td>
+                        <td>
+                            <div class="user-name-cell">
+                                <div class="user-avatar"
+                                     style="background:{{ $colors[($offset + $loop->index) % count($colors)] }};">
+                                    {{ strtoupper(substr($u->full_name ?? '?', 0, 1)) }}
+                                </div>
+                                <div class="user-name">{{ $u->full_name ?? '-' }}</div>
+                            </div>
+                        </td>
+                        <td style="color:#7a9a90;font-size:12.5px;">{{ $u->email }}</td>
+                        <td style="text-align:right;">
+                            <span class="badge-count">{{ $u->total_pemeriksaan }}</span>
+                        </td>
+                    </tr>
+                    @endforeach
+                @endif
             </tbody>
         </table>
-        <div style="margin-top:16px;">
-            <a href="{{ route('katalog.index') }}" style="font-size:13px;color:#2d9e72;font-weight:600;text-decoration:none;">
-                Lihat semua katalog <i class="fas fa-arrow-right" style="font-size:11px;"></i>
-            </a>
-        </div>
-    </div>
 
-    {{-- QUICK LINKS --}}
-    <div class="section-card">
-        <h3><i class="fas fa-bolt"></i>Aksi Cepat</h3>
-        <a href="{{ route('katalog.index') }}" class="quick-link">
-            <i class="fas fa-book-medical"></i>
-            Kelola Katalog Pemeriksaan
-        </a>
-        <a href="{{ route('katalog.index') }}?status=nonaktif" class="quick-link">
-            <i class="fas fa-eye-slash"></i>
-            Lihat Katalog Nonaktif
-        </a>
-
-        <div style="margin-top:24px;padding-top:20px;border-top:1px solid #eef2f1;">
-            <div style="font-size:12px;font-weight:600;color:#7a9a90;margin-bottom:12px;letter-spacing:0.5px;text-transform:uppercase;">Info Sistem</div>
-            <div style="font-size:13px;color:#555;line-height:2;">
-                <div>Katalog aktif: <strong>{{ $katalogAktif }}</strong></div>
-                <div>Katalog nonaktif: <strong>{{ $totalKatalog - $katalogAktif }}</strong></div>
-                <div>Pengguna terdaftar: <strong>{{ $totalUser }}</strong></div>
+        {{-- Pagination --}}
+        @if($users instanceof \Illuminate\Pagination\LengthAwarePaginator && $users->lastPage() > 1)
+        <div class="pagination-row">
+            <div class="pagination-info">
+                {{ $users->firstItem() }}–{{ $users->lastItem() }} dari {{ $users->total() }} pengguna
             </div>
+            <div class="pagination-pages">
+                {{-- Prev --}}
+                @if($users->onFirstPage())
+                    <span class="page-btn" style="opacity:.4;cursor:not-allowed;">
+                        <i class="fas fa-chevron-left" style="font-size:10px;"></i>
+                    </span>
+                @else
+                    <a href="{{ $users->previousPageUrl() }}" class="page-btn">
+                        <i class="fas fa-chevron-left" style="font-size:10px;"></i>
+                    </a>
+                @endif
+
+                @php
+                    $cur  = $users->currentPage();
+                    $last = $users->lastPage();
+                    $pages = [];
+                    if ($last <= 7) {
+                        $pages = range(1, $last);
+                    } else {
+                        $pages = [1, 2, 3];
+                        if ($cur > 4) $pages[] = '…';
+                        foreach (range(max(4, $cur-1), min($last-3, $cur+1)) as $p)
+                            if (!in_array($p, $pages)) $pages[] = $p;
+                        if ($cur < $last - 3) $pages[] = '…';
+                        foreach ([max($last-2,4), $last-1, $last] as $p)
+                            if (!in_array($p, $pages) && $p > 3) $pages[] = $p;
+                    }
+                @endphp
+
+                @foreach($pages as $p)
+                    @if($p === '…')
+                        <span class="page-btn dots">…</span>
+                    @else
+                        <a href="{{ $users->url($p) }}"
+                           class="page-btn {{ $cur === $p ? 'active' : '' }}">{{ $p }}</a>
+                    @endif
+                @endforeach
+
+                {{-- Next --}}
+                @if($users->hasMorePages())
+                    <a href="{{ $users->nextPageUrl() }}" class="page-btn">
+                        <i class="fas fa-chevron-right" style="font-size:10px;"></i>
+                    </a>
+                @else
+                    <span class="page-btn" style="opacity:.4;cursor:not-allowed;">
+                        <i class="fas fa-chevron-right" style="font-size:10px;"></i>
+                    </span>
+                @endif
+            </div>
+            <form method="GET" action="{{ route('admin.index') }}" id="perPageForm">
+                <input type="hidden" name="search"  value="{{ $search }}">
+                <input type="hidden" name="tahun"   value="{{ $tahun }}">
+                <input type="hidden" name="page"    value="1">
+                <select name="per_page" class="per-page-select"
+                        onchange="document.getElementById('perPageForm').submit()">
+                    @foreach([10, 25, 50] as $n)
+                        <option value="{{ $n }}" {{ $perPage === $n ? 'selected' : '' }}>{{ $n }} / halaman</option>
+                    @endforeach
+                </select>
+            </form>
         </div>
+        @elseif($users instanceof \Illuminate\Pagination\LengthAwarePaginator)
+        <div class="pagination-row">
+            <div class="pagination-info">{{ $users->total() }} pengguna</div>
+        </div>
+        @endif
     </div>
 </div>
 
+@endsection
+
+@section('scripts')
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+@if(!isset($error) || !$error)
+// ── Monthly Chart ──
+const labels  = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+const dataset = @json(array_values($chartData->toArray()));
+
+const hasData = dataset.some(v => v > 0);
+
+const ctx = document.getElementById('monthlyChart').getContext('2d');
+new Chart(ctx, {
+    type: 'bar',
+    data: {
+        labels,
+        datasets: [{
+            label: 'Jumlah Pemeriksaan',
+            data: dataset,
+            backgroundColor: 'rgba(45,158,114,0.85)',
+            borderRadius: 6,
+            borderSkipped: false,
+            barThickness: 28,
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { display: true, position: 'bottom',
+                labels: { font: { size: 12 }, color: '#5a7a70', boxWidth: 14, padding: 16 }
+            },
+            tooltip: {
+                callbacks: {
+                    label: ctx => ` ${ctx.parsed.y.toLocaleString('id')} jadwal`
+                }
+            },
+            datalabels: false
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                grid: { color: 'rgba(0,0,0,0.05)' },
+                ticks: { font: { size: 12 }, color: '#7a9a90',
+                    callback: v => v.toLocaleString('id') }
+            },
+            x: {
+                grid: { display: false },
+                ticks: { font: { size: 12 }, color: '#7a9a90' }
+            }
+        }
+    }
+});
+
+if (!hasData) {
+    document.querySelector('.chart-wrap').insertAdjacentHTML('beforeend',
+        '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;' +
+        'color:#7a9a90;font-size:14px;pointer-events:none;">' +
+        '<i class="fas fa-chart-bar" style="margin-right:8px;color:#c8ddd7;"></i>' +
+        'Belum ada data jadwal pada tahun ini</div>'
+    );
+}
+@endif
+
+// ── Debounce search ──
+let searchTimer;
+function debounceSearch(form) {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => form.submit(), 450);
+}
+</script>
 @endsection
