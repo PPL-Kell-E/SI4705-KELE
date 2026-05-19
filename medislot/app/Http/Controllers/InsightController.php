@@ -9,6 +9,114 @@ use Carbon\Carbon;
 
 class InsightController extends Controller
 {
+    public function progress(\Illuminate\Http\Request $request)
+    {
+        $userId  = Auth::id();
+        $periode = $request->query('periode', '6_bulan');
+
+        try {
+            $periodDays = match($periode) {
+                '1_bulan' => 30,
+                '1_tahun' => 365,
+                default   => 180,
+            };
+            $startDate = Carbon::today()->subDays($periodDays);
+
+            // Progress konsistensi bulan ini
+            $bulanIniJadwal  = Jadwal::where('user_id', $userId)
+                ->whereYear('tanggal', now()->year)
+                ->whereMonth('tanggal', now()->month)
+                ->get();
+            $totalBulanIni   = $bulanIniJadwal->count();
+            $selesaiBulanIni = $bulanIniJadwal->where('status', 'selesai')->count();
+            $sisaBulanIni    = $totalBulanIni - $selesaiBulanIni;
+            $progressPersen  = $totalBulanIni > 0 ? round($selesaiBulanIni / $totalBulanIni * 100) : 0;
+
+            // Health streak
+            $streak = $this->computeStreak($userId);
+
+            // 5 jenis pemeriksaan terbaru (unik, diurutkan dari terlama)
+            $recentJadwal = Jadwal::where('user_id', $userId)
+                ->orderBy('tanggal', 'asc')
+                ->get()
+                ->unique('jenis_pemeriksaan')
+                ->take(5)
+                ->values();
+
+            // Jadwal mendatang berikutnya
+            $nextJadwal = Jadwal::where('user_id', $userId)
+                ->where('status', 'mendatang')
+                ->where('tanggal', '>=', Carbon::today())
+                ->orderBy('tanggal', 'asc')
+                ->orderBy('waktu', 'asc')
+                ->first();
+
+            // Jadwal dalam periode terpilih untuk chart & statistik
+            $jadwalPeriode  = Jadwal::where('user_id', $userId)
+                ->where('tanggal', '>=', $startDate)
+                ->orderBy('tanggal', 'asc')
+                ->get();
+
+            $chartData      = $this->buildChartData($jadwalPeriode);
+            $totalPeriode   = $jadwalPeriode->count();
+            $selesaiPeriode = $jadwalPeriode->where('status', 'selesai')->count();
+            $pendingPeriode = $jadwalPeriode->where('status', 'mendatang')->count();
+            $selesaiPersen  = $totalPeriode > 0 ? round($selesaiPeriode / $totalPeriode * 100, 1) : 0;
+            $pendingPersen  = $totalPeriode > 0 ? round($pendingPeriode / $totalPeriode * 100, 1) : 0;
+
+            $lastUpdated = now()->translatedFormat('d M Y, H:i') . ' WIB';
+            $error       = null;
+
+        } catch (\Exception $e) {
+            $progressPersen = $selesaiBulanIni = $sisaBulanIni = $totalBulanIni = 0;
+            $streak = 0;
+            $recentJadwal = collect();
+            $nextJadwal   = null;
+            $chartData    = ['labels' => [], 'values' => [], 'statuses' => [], 'colors' => []];
+            $totalPeriode = $selesaiPeriode = $pendingPeriode = 0;
+            $selesaiPersen = $pendingPersen = 0;
+            $lastUpdated   = null;
+            $error         = 'Data progress kesehatan gagal dimuat.';
+        }
+
+        return view('insight.progress', compact(
+            'progressPersen', 'selesaiBulanIni', 'sisaBulanIni', 'totalBulanIni',
+            'streak', 'recentJadwal', 'nextJadwal',
+            'chartData', 'totalPeriode', 'selesaiPeriode', 'pendingPeriode',
+            'selesaiPersen', 'pendingPersen',
+            'periode', 'lastUpdated', 'error'
+        ));
+    }
+
+    private function buildChartData($jadwal): array
+    {
+        $grouped = $jadwal->groupBy(fn($j) => Carbon::parse($j->tanggal)->toDateString());
+
+        $labels = $values = $statuses = $colors = [];
+
+        foreach ($grouped as $date => $items) {
+            $total   = $items->count();
+            $selesai = $items->where('status', 'selesai')->count();
+            $pct     = $total > 0 ? round($selesai / $total * 100) : 0;
+
+            $labels[] = Carbon::parse($date)->translatedFormat('d M');
+            $values[] = $pct;
+
+            if ($selesai === $total) {
+                $statuses[] = 'selesai';
+                $colors[]   = '#2d9e72';
+            } elseif ($items->where('status', 'mendatang')->count() > 0) {
+                $statuses[] = 'pending';
+                $colors[]   = '#94a3b8';
+            } else {
+                $statuses[] = 'berlangsung';
+                $colors[]   = '#f59e0b';
+            }
+        }
+
+        return compact('labels', 'values', 'statuses', 'colors');
+    }
+
     public function index()
     {
         $userId  = Auth::id();

@@ -49,6 +49,18 @@
     font-size:10.5px; color:#7a9a90; font-weight:500;
     padding:2px 8px; background:#f0f4f3; border-radius:10px;
 }
+.rec-next-date {
+    background:#f0faf5; border:1px solid #c6e8d7; border-radius:10px;
+    padding:10px 14px; display:flex; align-items:center; justify-content:space-between;
+}
+.rec-next-date-label { font-size:11px; color:#7a9a90; font-weight:500; margin-bottom:3px; }
+.rec-next-date-value { font-size:13.5px; font-weight:700; color:#1a3c34; }
+.rec-next-date-countdown {
+    font-size:11.5px; font-weight:600; padding:4px 10px; border-radius:20px;
+    white-space:nowrap;
+}
+.countdown-soon  { background:#fff3cd; color:#856404; }
+.countdown-ok    { background:#d4ede3; color:#1a5c3a; }
 
 /* MODAL */
 .modal-overlay {
@@ -127,8 +139,25 @@
             </div>
         </div>
 
+        @php
+            $nextDate     = \Carbon\Carbon::today()->addDays($rec->interval_days);
+            $daysLeft     = \Carbon\Carbon::today()->diffInDays($nextDate);
+            $isSoon       = $daysLeft <= 30;
+            $nextDateStr  = $nextDate->translatedFormat('d M Y');
+            $tanggalParam = $nextDate->format('Y-m-d');
+        @endphp
+        <div class="rec-next-date">
+            <div>
+                <div class="rec-next-date-label"><i class="fas fa-calendar-alt" style="color:#2d9e72;margin-right:4px;"></i>Pemeriksaan berikutnya</div>
+                <div class="rec-next-date-value">{{ $nextDateStr }}</div>
+            </div>
+            <span class="rec-next-date-countdown {{ $isSoon ? 'countdown-soon' : 'countdown-ok' }}">
+                {{ $daysLeft }} hari lagi
+            </span>
+        </div>
+
         <div class="rec-actions">
-            <a href="{{ route('jadwal.create') }}" class="btn-sm btn-jadwal">
+            <a href="{{ route('jadwal.create', ['tanggal' => $tanggalParam]) }}" class="btn-sm btn-jadwal">
                 <i class="fas fa-calendar-plus"></i> Jadwalkan
             </a>
             <button class="btn-sm btn-edit" onclick="openEditModal({{ $rec->id }}, '{{ addslashes($rec->nama) }}', '{{ addslashes($rec->deskripsi ?? '') }}', {{ $rec->interval_days }}, '{{ addslashes($rec->interval_label) }}')">
