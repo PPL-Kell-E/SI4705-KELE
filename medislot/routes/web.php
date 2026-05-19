@@ -63,7 +63,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/riwayat',            fn() => view('coming-soon', ['title' => 'Riwayat']))->name('riwayat.index');
     // PKE-15: Insight & Pencapaian
     Route::get('/insight',            [InsightController::class, 'index'])->name('insight.index');
-    Route::get('/insight/progress',   fn() => view('coming-soon', ['title' => 'Progress']))->name('insight.progress');
+    Route::get('/insight/progress',   [InsightController::class, 'progress'])->name('insight.progress');
     // PKE-11: Pencatatan Hasil Pemeriksaan
     Route::get('/hasil-pemeriksaan',                       [HasilPemeriksaanController::class, 'index'])->name('hasil-pemeriksaan.index');
     Route::post('/hasil-pemeriksaan',                      [HasilPemeriksaanController::class, 'store'])->name('hasil-pemeriksaan.store');

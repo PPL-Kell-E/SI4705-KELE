@@ -125,14 +125,16 @@
                     <label>Tanggal</label>
                     <input type="date" name="tanggal"
                            id="inputTanggal"
-                           value="{{ old('tanggal') }}"
-                           min="{{ date('Y-m-d') }}"
+                           value="{{ old('tanggal', request('tanggal')) }}"
                            required>
                     @error('tanggal')
                         <div class="form-error">{{ $message }}</div>
                     @enderror
                     <div class="slot-info" id="slotInfo">
                         <i class="fas fa-check-circle"></i> Tanggal tersedia
+                    </div>
+                    <div id="pastInfo" style="display:none;margin-top:6px;font-size:12px;color:#7a9a90;">
+                        <i class="fas fa-info-circle"></i> Tanggal sudah lewat — status akan otomatis <strong>Selesai</strong>
                     </div>
                 </div>
 
@@ -172,10 +174,23 @@
 @section('scripts')
 <script>
     document.getElementById('inputTanggal').addEventListener('change', function() {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const selected = new Date(this.value);
+        const pastInfo = document.getElementById('pastInfo');
+        const slotInfo = document.getElementById('slotInfo');
+
         if (this.value) {
-            document.getElementById('slotInfo').classList.add('show');
+            if (selected < today) {
+                slotInfo.classList.remove('show');
+                pastInfo.style.display = 'block';
+            } else {
+                pastInfo.style.display = 'none';
+                slotInfo.classList.add('show');
+            }
         } else {
-            document.getElementById('slotInfo').classList.remove('show');
+            slotInfo.classList.remove('show');
+            pastInfo.style.display = 'none';
         }
     });
 

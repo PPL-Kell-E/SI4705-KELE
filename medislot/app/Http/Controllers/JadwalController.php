@@ -35,10 +35,14 @@ class JadwalController extends Controller
         $validated = $request->validate([
             'jenis_pemeriksaan' => ['required', 'string', 'max:255'],
             'fasilitas_klinik'  => ['required', 'string', 'max:255'],
-            'tanggal'           => ['required', 'date', 'after_or_equal:today'],
+            'tanggal'           => ['required', 'date'],
             'waktu'             => ['required', 'date_format:H:i'],
             'catatan'           => ['nullable', 'string', 'max:500'],
         ]);
+
+        $status = \Carbon\Carbon::parse($validated['tanggal'])->startOfDay()->lt(now()->startOfDay())
+            ? 'selesai'
+            : 'mendatang';
 
         Jadwal::create([
             'user_id'           => Auth::id(),
@@ -47,7 +51,7 @@ class JadwalController extends Controller
             'tanggal'           => $validated['tanggal'],
             'waktu'             => $validated['waktu'],
             'catatan'           => $validated['catatan'] ?? null,
-            'status'            => 'mendatang',
+            'status'            => $status,
         ]);
 
         return redirect()->route('jadwal.index')->with('success', 'Jadwal berhasil ditambahkan');
