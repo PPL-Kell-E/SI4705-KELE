@@ -20,6 +20,7 @@ class HasilPemeriksaan extends Model
 
     protected $casts = [
         'tanggal_pemeriksaan' => 'date',
+        'hidden_at'           => 'datetime',
     ];
 
     public function user()
