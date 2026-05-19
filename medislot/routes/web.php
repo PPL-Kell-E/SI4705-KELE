@@ -12,6 +12,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\InsightController;
 use App\Http\Controllers\TargetKesehatanController;
 use App\Http\Controllers\HasilPemeriksaanController;
+use App\Http\Controllers\RiwayatController;
 use App\Http\Controllers\AdminController;
 
 Route::get('/', function () {
@@ -60,7 +61,9 @@ Route::middleware('auth')->group(function () {
     // PKE-5: Perencanaan Jadwal Pemeriksaan
     Route::resource('/jadwal', JadwalController::class)->except(['show']);
     Route::patch('/jadwal/{jadwal}/selesai', [JadwalController::class, 'tandaiSelesai'])->name('jadwal.selesai');
-    Route::get('/riwayat',            fn() => view('coming-soon', ['title' => 'Riwayat']))->name('riwayat.index');
+    // PKE-12: Riwayat Kesehatan
+    Route::get('/riwayat',                              [RiwayatController::class, 'index'])->name('riwayat.index');
+    Route::patch('/riwayat/{hasilPemeriksaan}/hide',    [RiwayatController::class, 'hide'])->name('riwayat.hide');
     // PKE-15: Insight & Pencapaian
     Route::get('/insight',            [InsightController::class, 'index'])->name('insight.index');
     Route::get('/insight/progress',   [InsightController::class, 'progress'])->name('insight.progress');

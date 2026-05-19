@@ -16,10 +16,12 @@ class HasilPemeriksaan extends Model
         'nama_dokter',
         'hasil_pemeriksaan',
         'catatan_tambahan',
+        'hidden_at',
     ];
 
     protected $casts = [
         'tanggal_pemeriksaan' => 'date',
+        'hidden_at'           => 'datetime',
     ];
 
     public function user()
