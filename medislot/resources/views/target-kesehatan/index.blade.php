@@ -160,9 +160,10 @@
 
     .empty-state {
         text-align: center; padding: 50px 20px; color: #7a9a90;
+        display: flex; flex-direction: column; align-items: center;
     }
     .empty-state i { font-size: 44px; margin-bottom: 16px; color: #c8ddd7; display: block; }
-    .empty-state p { font-size: 14.5px; margin-bottom: 16px; }
+    .empty-state p { font-size: 14.5px; margin-bottom: 0; }
     .empty-pencapaian { text-align: center; padding: 20px 0; color: #b0c5bf; font-size: 13px; }
 
     /* Success Modal */
@@ -313,7 +314,7 @@
                     <a href="{{ route('target-kesehatan.index') }}" style="color:#2d9e72;font-size:14px;">Lihat Semua</a>
                 @else
                     <p>Belum ada target kesehatan. Mulai perjalanan sehatmu!</p>
-                    <a href="{{ route('target-kesehatan.create') }}" class="btn-tambah" style="display:inline-flex;margin-top:4px;">
+                    <a href="{{ route('target-kesehatan.create') }}" class="btn-tambah" style="margin-top:16px;">
                         <i class="fas fa-plus"></i> Buat Target Baru
                     </a>
                 @endif
