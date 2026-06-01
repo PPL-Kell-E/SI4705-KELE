@@ -131,6 +131,46 @@
             transition: background 0.18s;
         }
         .topbar-icon:hover { background: #dbeee7; }
+
+        /* ── Notification Bell ── */
+        .notif-bell-wrap { position: relative; }
+        .notif-badge {
+            display: none; position: absolute; top: -4px; right: -4px;
+            min-width: 18px; height: 18px; border-radius: 999px;
+            background: #e05252; color: #fff;
+            font-size: 10px; font-weight: 700;
+            align-items: center; justify-content: center; padding: 0 4px;
+        }
+        .notif-badge.show { display: flex; }
+        .notif-dropdown {
+            display: none; position: absolute; top: calc(100% + 10px); right: 0;
+            width: 340px; background: #fff; border-radius: 14px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.14); z-index: 200; overflow: hidden;
+        }
+        .notif-dropdown.open { display: block; }
+        .notif-drop-head {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 18px 10px; border-bottom: 1px solid #eef2f1;
+        }
+        .notif-drop-head h4 { font-size: 14px; font-weight: 700; color: #1a3c34; }
+        .notif-drop-read-all {
+            font-size: 12px; color: #2d9e72; font-weight: 600;
+            background: none; border: none; cursor: pointer; font-family: inherit;
+        }
+        .notif-drop-list { max-height: 320px; overflow-y: auto; }
+        .notif-drop-item {
+            padding: 12px 18px; border-bottom: 1px solid #f5f8f7;
+            cursor: pointer; transition: background 0.12s;
+        }
+        .notif-drop-item:hover { background: #f8fbfa; }
+        .notif-drop-item.read { opacity: 0.55; }
+        .notif-drop-item-head { display: flex; justify-content: space-between; margin-bottom: 2px; }
+        .notif-drop-title { font-size: 13px; font-weight: 700; color: #1a3c34; }
+        .notif-drop-time  { font-size: 11px; color: #7a9a90; }
+        .notif-drop-pesan { font-size: 12.5px; color: #5a7a70; line-height: 1.4; }
+        .notif-drop-empty { padding: 28px; text-align: center; color: #7a9a90; font-size: 13px; }
+        .notif-drop-empty i { font-size: 28px; color: #c8ddd7; display: block; margin-bottom: 8px; }
+
         .topbar-avatar {
             width: 36px; height: 36px; background: #2d9e72;
             border-radius: 50%; display: flex; align-items: center; justify-content: center;
@@ -221,7 +261,25 @@
         <div class="topbar-actions">
             @yield('topbar-actions')
             <div class="topbar-icon"><i class="fas fa-search"></i></div>
-            <div class="topbar-icon"><i class="fas fa-bell"></i></div>
+            {{-- Bell with notification badge & dropdown --}}
+            <div class="notif-bell-wrap" id="notifBellWrap">
+                <div class="topbar-icon" onclick="toggleNotifDropdown()" id="notifBellBtn">
+                    <i class="fas fa-bell"></i>
+                </div>
+                <span class="notif-badge" id="notifBadge">0</span>
+                <div class="notif-dropdown" id="notifDropdown">
+                    <div class="notif-drop-head">
+                        <h4>Notifikasi</h4>
+                        <button class="notif-drop-read-all" onclick="markAllRead()">Baca Semua</button>
+                    </div>
+                    <div class="notif-drop-list" id="notifDropList">
+                        <div class="notif-drop-empty">
+                            <i class="fas fa-bell-slash"></i>
+                            Tidak ada notifikasi baru.
+                        </div>
+                    </div>
+                </div>
+            </div>
             <a href="{{ route('profile.show') }}" style="text-decoration:none;">
                 <div class="topbar-avatar" style="{{ !empty($authProfile?->avatar_url) ? 'background:transparent;padding:0;overflow:hidden;' : '' }}">
                     @if(!empty($authProfile?->avatar_url))
@@ -249,6 +307,76 @@ function toggleInsightMenu(e) {
     btn.classList.toggle('open');
     sub.classList.toggle('open');
 }
+
+// ── Notification Bell ──
+const _CSRF = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+
+function toggleNotifDropdown() {
+    const dd = document.getElementById('notifDropdown');
+    dd.classList.toggle('open');
+    if (dd.classList.contains('open')) fetchNotifikasi();
+}
+
+document.addEventListener('click', function(e) {
+    const wrap = document.getElementById('notifBellWrap');
+    if (wrap && !wrap.contains(e.target)) {
+        document.getElementById('notifDropdown').classList.remove('open');
+    }
+});
+
+function fetchNotifikasi() {
+    fetch('/notifikasi/check', { headers: { 'Accept': 'application/json' } })
+        .then(r => r.json())
+        .then(data => {
+            const badge = document.getElementById('notifBadge');
+            const list  = document.getElementById('notifDropList');
+
+            if (data.unread_count > 0) {
+                badge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
+                badge.classList.add('show');
+            } else {
+                badge.classList.remove('show');
+            }
+
+            if (!data.notifikasi || data.notifikasi.length === 0) {
+                list.innerHTML = '<div class="notif-drop-empty"><i class="fas fa-bell-slash"></i>Tidak ada notifikasi baru.</div>';
+                return;
+            }
+
+            list.innerHTML = data.notifikasi.map(n => `
+                <div class="notif-drop-item" onclick="readNotifDrop(${n.id}, ${n.jadwal_id ?? 'null'}, this)">
+                    <div class="notif-drop-item-head">
+                        <span class="notif-drop-title">${n.judul}</span>
+                        <span class="notif-drop-time">${n.waktu}</span>
+                    </div>
+                    <div class="notif-drop-pesan">${n.pesan}</div>
+                </div>`).join('');
+        })
+        .catch(() => {});
+}
+
+function readNotifDrop(id, jadwalId, el) {
+    fetch(`/notifikasi/${id}/read`, {
+        method: 'PATCH',
+        headers: { 'X-CSRF-TOKEN': _CSRF, 'Accept': 'application/json' }
+    });
+    el.classList.add('read');
+    if (jadwalId) window.location.href = '/jadwal';
+}
+
+function markAllRead() {
+    fetch('/notifikasi/read-all', {
+        method: 'PATCH',
+        headers: { 'X-CSRF-TOKEN': _CSRF, 'Accept': 'application/json' }
+    }).then(() => {
+        document.getElementById('notifBadge').classList.remove('show');
+        document.querySelectorAll('.notif-drop-item').forEach(el => el.classList.add('read'));
+    });
+}
+
+// Poll setiap 60 detik
+fetchNotifikasi();
+setInterval(fetchNotifikasi, 60000);
 </script>
 </body>
 </html>

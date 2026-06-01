@@ -14,6 +14,7 @@ use App\Http\Controllers\TargetKesehatanController;
 use App\Http\Controllers\HasilPemeriksaanController;
 use App\Http\Controllers\RiwayatController;
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\PengingatController;
 
 Route::get('/', function () {
     return redirect('/login');
@@ -39,8 +40,16 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile',  [ProfileController::class, 'show'])->name('profile.show');
     Route::put('/profile',  [ProfileController::class, 'update'])->name('profile.update');
 
-    // Stub routes for sidebar (to be implemented per sprint)
-    Route::get('/pengingat',          fn() => view('coming-soon', ['title' => 'Pengingat']))->name('pengingat.index');
+    // PKE-18: Pengingat & Notifikasi
+    Route::prefix('pengingat')->name('pengingat.')->group(function () {
+        Route::get('/',              [PengingatController::class, 'index'])->name('index');
+        Route::post('/',             [PengingatController::class, 'store'])->name('store');
+        Route::patch('/{pengingat}/toggle', [PengingatController::class, 'toggle'])->name('toggle');
+        Route::put('/{pengingat}',   [PengingatController::class, 'update'])->name('update');
+    });
+    Route::get('/notifikasi/check',         [PengingatController::class, 'checkNotifikasi'])->name('notifikasi.check');
+    Route::patch('/notifikasi/{id}/read',   [PengingatController::class, 'markRead'])->name('notifikasi.read');
+    Route::patch('/notifikasi/read-all',    [PengingatController::class, 'markAllRead'])->name('notifikasi.read-all');
     // PKE: Rekomendasi CRUD
     Route::get('/rekomendasi',                             [RecommendationController::class, 'index'])->name('rekomendasi.index');
     Route::post('/rekomendasi',                            [RecommendationController::class, 'store'])->name('rekomendasi.store');
