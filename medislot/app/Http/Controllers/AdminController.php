@@ -4,11 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\HasilPemeriksaan;
 use App\Models\Jadwal;
-use App\Models\KatalogPemeriksaan;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Carbon\Carbon;
 
 class AdminController extends Controller
 {
@@ -22,8 +20,8 @@ class AdminController extends Controller
 
         try {
             // ── Stat cards ──
-            $totalUser    = User::where('role', 'user')->count();
-            $totalJadwal  = Jadwal::count();
+            $totalUser     = User::where('role', 'user')->count();
+            $totalJadwal   = Jadwal::count();
             $aktifBulanIni = DB::table('sessions')
                 ->join('users', 'sessions.user_id', '=', 'users.id')
                 ->where('users.role', 'user')
@@ -31,12 +29,22 @@ class AdminController extends Controller
                 ->distinct('sessions.user_id')
                 ->count('sessions.user_id');
 
-            // ── Chart: jadwal per bulan ──
-            $rawMonthly = Jadwal::selectRaw("EXTRACT(MONTH FROM tanggal)::int AS bulan, COUNT(*) AS total")
-                ->whereYear('tanggal', $tahun)
-                ->groupByRaw("EXTRACT(MONTH FROM tanggal)::int")
-                ->orderByRaw("EXTRACT(MONTH FROM tanggal)::int")
-                ->pluck('total', 'bulan');
+            // ── Chart: jadwal per bulan (SQLite + PostgreSQL compatible) ──
+            $driver = DB::getDriverName();
+
+            if ($driver === 'sqlite') {
+                $rawMonthly = Jadwal::selectRaw("CAST(strftime('%m', tanggal) AS INTEGER) AS bulan, COUNT(*) AS total")
+                    ->whereRaw("strftime('%Y', tanggal) = ?", [(string) $tahun])
+                    ->groupByRaw("strftime('%m', tanggal)")
+                    ->orderByRaw("strftime('%m', tanggal)")
+                    ->pluck('total', 'bulan');
+            } else {
+                $rawMonthly = Jadwal::selectRaw("EXTRACT(MONTH FROM tanggal)::int AS bulan, COUNT(*) AS total")
+                    ->whereYear('tanggal', $tahun)
+                    ->groupByRaw("EXTRACT(MONTH FROM tanggal)::int")
+                    ->orderByRaw("EXTRACT(MONTH FROM tanggal)::int")
+                    ->pluck('total', 'bulan');
+            }
 
             $chartData = collect(range(1, 12))
                 ->mapWithKeys(fn($m) => [$m => (int) ($rawMonthly->get($m, 0))]);
@@ -51,17 +59,15 @@ class AdminController extends Controller
                 ->orderByDesc('total_pemeriksaan')
                 ->orderBy('full_name');
 
-            $users       = $usersQuery->paginate($perPage)->withQueryString();
-            $totalPages  = $users->lastPage();
-            $error       = null;
+            $users      = $usersQuery->paginate($perPage)->withQueryString();
+            $error      = null;
 
         } catch (\Exception $e) {
             $totalUser     = 0;
             $totalJadwal   = 0;
             $aktifBulanIni = 0;
             $chartData     = collect(array_fill(1, 12, 0));
-            $users         = collect();
-            $totalPages    = 0;
+            $users         = new \Illuminate\Pagination\LengthAwarePaginator([], 0, $perPage);
             $error         = 'Data dashboard gagal dimuat.';
         }
 

@@ -19,8 +19,8 @@ return new class extends Migration
             $table->integer('blood_pressure_diastolic')->nullable();
             $table->decimal('blood_sugar_mg_dl', 6, 2)->nullable();
             $table->decimal('cholesterol_mg_dl', 6, 2)->nullable();
-            $table->jsonb('allergies')->nullable();
-            $table->jsonb('chronic_conditions')->nullable();
+            $table->json('allergies')->nullable();
+            $table->json('chronic_conditions')->nullable();
             $table->text('notes')->nullable();
             $table->timestamp('recorded_at')->nullable();
             $table->timestamps();
