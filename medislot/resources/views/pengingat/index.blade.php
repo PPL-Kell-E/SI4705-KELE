@@ -299,11 +299,9 @@
 
 {{-- Top action bar --}}
 <div class="page-top">
-    @if($jadwalTanpaReminder->isNotEmpty())
     <button class="btn-tambah" onclick="openAddModal()">
         <i class="fas fa-plus"></i> Tambah Pengingat
     </button>
-    @endif
 </div>
 
 {{-- ── REMINDER LIST ── --}}
@@ -389,6 +387,25 @@
             </button>
         </div>
 
+        @if($jadwalTanpaReminder->isEmpty())
+        {{-- No jadwal available --}}
+        <div style="padding: 32px 28px; text-align: center;">
+            <i class="fas fa-calendar-times" style="font-size:40px;color:#c8ddd7;display:block;margin-bottom:14px;"></i>
+            <div style="font-size:15px;font-weight:700;color:#1a3c34;margin-bottom:6px;">
+                Tidak ada jadwal tersedia
+            </div>
+            <div style="font-size:13.5px;color:#7a9a90;margin-bottom:20px;line-height:1.5;">
+                Semua jadwal pemeriksaan mendatang sudah memiliki pengingat,<br>
+                atau belum ada jadwal aktif. Buat jadwal baru terlebih dahulu.
+            </div>
+            <a href="{{ route('jadwal.create') }}" class="btn-simpan" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px;">
+                <i class="fas fa-plus"></i> Buat Jadwal Baru
+            </a>
+        </div>
+        <div class="modal-footer" style="border-top:1px solid #eef2f1;">
+            <button type="button" class="btn-batal" onclick="closeAddModal()">Tutup</button>
+        </div>
+        @else
         <form method="POST" action="{{ route('pengingat.store') }}" id="addForm">
             @csrf
 
@@ -456,6 +473,7 @@
                 <button type="submit" class="btn-simpan">Simpan</button>
             </div>
         </form>
+        @endif
     </div>
 </div>
 
@@ -531,23 +549,7 @@
 @section('scripts')
 <script>
 // ── Data from server ──
-const pengingatData = @json($pengingat->map(fn($p) => [
-    'id'        => $p->id,
-    'is_active' => $p->is_active,
-    'jadwal'    => [
-        'id'                => $p->jadwal?->id,
-        'nama'              => $p->jadwal?->jenis_pemeriksaan,
-        'tanggal'           => $p->jadwal?->tanggal?->format('Y-m-d'),
-        'waktu'             => substr($p->jadwal?->waktu ?? '00:00', 0, 5),
-        'fasilitas_klinik'  => $p->jadwal?->fasilitas_klinik,
-    ],
-    'waktu' => $p->waktu->map(fn($w) => [
-        'id'           => $w->id,
-        'offset_menit' => $w->offset_menit,
-        'label'        => $w->offsetLabel(),
-        'chip'         => $w->chipLabel(),
-    ]),
-]));
+const pengingatData = @json($pengingatJson);
 
 const offsetOptions = @json($offsetOptions);
 let currentEditId = null;
