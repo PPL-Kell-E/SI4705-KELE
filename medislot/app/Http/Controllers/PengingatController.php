@@ -27,15 +27,18 @@ class PengingatController extends Controller
         $user = Auth::user();
 
         try {
+            // Auto-create default reminder untuk jadwal mendatang yang belum punya reminder
+            $this->autoCreateDefaultReminders($user->id);
+
             $pengingat = Pengingat::with(['jadwal', 'waktu'])
                 ->where('user_id', $user->id)
                 ->whereHas('jadwal', fn($q) => $q->where('status', 'mendatang'))
-                ->orderByDesc('created_at')
+                ->orderBy('created_at')
                 ->get();
 
             $jadwalTanpaReminder = Jadwal::where('user_id', $user->id)
                 ->where('status', 'mendatang')
-                ->whereNotIn('id', $pengingat->pluck('jadwal_id'))
+                ->whereNotIn('id', $pengingat->pluck('jadwal_id')->toArray())
                 ->orderBy('tanggal')
                 ->get();
 
@@ -53,9 +56,31 @@ class PengingatController extends Controller
             $error               = 'Data reminder gagal dimuat.';
         }
 
+        $pengingatJson = $pengingat->map(function ($p) {
+            return [
+                'id'        => $p->id,
+                'is_active' => $p->is_active,
+                'jadwal'    => [
+                    'id'               => $p->jadwal?->id,
+                    'nama'             => $p->jadwal?->jenis_pemeriksaan,
+                    'tanggal'          => $p->jadwal?->tanggal?->format('Y-m-d'),
+                    'waktu'            => substr($p->jadwal?->waktu ?? '00:00', 0, 5),
+                    'fasilitas_klinik' => $p->jadwal?->fasilitas_klinik,
+                ],
+                'waktu' => $p->waktu->map(function ($w) {
+                    return [
+                        'id'           => $w->id,
+                        'offset_menit' => $w->offset_menit,
+                        'label'        => $w->offsetLabel(),
+                        'chip'         => $w->chipLabel(),
+                    ];
+                })->values()->all(),
+            ];
+        })->values()->all();
+
         return view('pengingat.index', compact(
             'pengingat', 'jadwalTanpaReminder', 'notifikasi',
-            'unreadCount', 'error'
+            'unreadCount', 'error', 'pengingatJson'
         ) + ['offsetOptions' => self::OFFSET_OPTIONS]);
     }
 
@@ -172,6 +197,42 @@ class PengingatController extends Controller
     {
         Notifikasi::where('user_id', Auth::id())->update(['is_read' => true]);
         return response()->json(['success' => true]);
+    }
+
+    // ── Internal: auto-buat default reminder untuk jadwal tanpa reminder ──
+
+    private function autoCreateDefaultReminders(string $userId): void
+    {
+        $jadwalIds = Pengingat::where('user_id', $userId)->pluck('jadwal_id')->toArray();
+
+        $jadwalTanpa = Jadwal::where('user_id', $userId)
+            ->where('status', 'mendatang')
+            ->when(!empty($jadwalIds), fn($q) => $q->whereNotIn('id', $jadwalIds))
+            ->get();
+
+        foreach ($jadwalTanpa as $jadwal) {
+            $jadwalDt = Carbon::parse($jadwal->tanggal->format('Y-m-d') . ' ' . $jadwal->waktu);
+
+            if (now()->gte($jadwalDt)) continue;
+
+            // Pilih offset terbesar yang masih valid (dari H-2 sampai 30 menit)
+            $defaultOffset = null;
+            foreach ([2880, 1440, 720, 360, 180, 60, 30] as $offset) {
+                if ((clone $jadwalDt)->subMinutes($offset)->gt(now())) {
+                    $defaultOffset = $offset;
+                    break;
+                }
+            }
+
+            if ($defaultOffset === null) continue;
+
+            $p = Pengingat::create([
+                'jadwal_id' => $jadwal->id,
+                'user_id'   => $userId,
+                'is_active' => true,
+            ]);
+            $p->waktu()->create(['offset_menit' => $defaultOffset]);
+        }
     }
 
     // ── Internal: proses reminder yang sudah waktunya ──
