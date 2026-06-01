@@ -42,7 +42,9 @@ class PengingatController extends Controller
                 ->orderBy('tanggal')
                 ->get();
 
+            // Proses reminder DULU sebelum status jadwal diupdate
             $this->processReminders($user->id);
+            $this->autoUpdateExpiredJadwal($user->id);
 
             $notifikasi  = Notifikasi::where('user_id', $user->id)->latest()->take(5)->get();
             $unreadCount = Notifikasi::where('user_id', $user->id)->where('is_read', false)->count();
@@ -168,15 +170,20 @@ class PengingatController extends Controller
     {
         $user = Auth::user();
         $this->processReminders($user->id);
+        $this->autoUpdateExpiredJadwal($user->id);
 
-        $notifikasi = Notifikasi::where('user_id', $user->id)
+        $notifikasi  = Notifikasi::where('user_id', $user->id)
             ->where('is_read', false)
             ->latest()
             ->take(10)
             ->get();
 
+        $unreadCount = Notifikasi::where('user_id', $user->id)
+            ->where('is_read', false)
+            ->count();
+
         return response()->json([
-            'unread_count' => $notifikasi->count(),
+            'unread_count' => $unreadCount,
             'notifikasi'   => $notifikasi->map(fn($n) => [
                 'id'        => $n->id,
                 'judul'     => $n->judul,
@@ -197,6 +204,24 @@ class PengingatController extends Controller
     {
         Notifikasi::where('user_id', Auth::id())->update(['is_read' => true]);
         return response()->json(['success' => true]);
+    }
+
+    // ── Internal: tandai jadwal mendatang yg sudah lewat waktunya ──
+
+    private function autoUpdateExpiredJadwal(string $userId): void
+    {
+        Jadwal::where('user_id', $userId)
+            ->where('status', 'mendatang')
+            ->where(function ($q) {
+                // tanggal sudah lewat
+                $q->whereDate('tanggal', '<', now()->toDateString())
+                  // atau tanggal hari ini tapi waktu sudah lewat
+                  ->orWhere(function ($q2) {
+                      $q2->whereDate('tanggal', now()->toDateString())
+                         ->where('waktu', '<', now()->format('H:i:s'));
+                  });
+            })
+            ->update(['status' => 'selesai']);
     }
 
     // ── Internal: auto-buat default reminder untuk jadwal tanpa reminder ──
@@ -244,30 +269,45 @@ class PengingatController extends Controller
         $pengingat = Pengingat::with(['jadwal', 'waktu'])
             ->where('user_id', $userId)
             ->where('is_active', true)
-            ->whereHas('jadwal', fn($q) => $q->where('status', 'mendatang'))
+            ->whereHas('jadwal') // tidak filter status agar jadwal yang baru selesai tetap diproses
             ->get();
 
         foreach ($pengingat as $p) {
             $jadwal   = $p->jadwal;
             $jadwalDt = Carbon::parse($jadwal->tanggal->format('Y-m-d') . ' ' . $jadwal->waktu);
 
-            if ($now->gte($jadwalDt)) continue;
-
             foreach ($p->waktu as $wt) {
                 $reminderDt = (clone $jadwalDt)->subMinutes($wt->offset_menit);
 
-                if ($now->gte($reminderDt) && !Notifikasi::where('pengingat_waktu_id', $wt->id)->exists()) {
-                    $waktuLabel = substr($jadwal->waktu, 0, 5);
-                    $hariLabel  = $wt->offset_menit >= 1440 ? 'besok' : 'segera';
+                // Buat notifikasi jika waktu reminder sudah tiba dan belum ada (grace period 48 jam)
+                $sudahWaktunya  = $now->gte($reminderDt);
+                $masihRelevan   = $now->diffInHours($reminderDt, false) <= 48; // max 48 jam setelah reminder time
+                $belumDibuat    = !Notifikasi::where('pengingat_waktu_id', $wt->id)->exists();
+
+                if ($sudahWaktunya && $masihRelevan && $belumDibuat) {
+                    $waktuLabel  = substr($jadwal->waktu, 0, 5);
+                    $selisihJam  = $now->diffInMinutes($jadwalDt, false);
+
+                    if ($selisihJam > 1440) {
+                        $kapanLabel = 'besok';
+                        $judul      = 'Pengingat Jadwal Besok!';
+                    } elseif ($selisihJam > 0) {
+                        $jam        = ceil($selisihJam / 60);
+                        $kapanLabel = $jam > 1 ? "{$jam} jam lagi" : 'segera';
+                        $judul      = 'Pengingat Jadwal Segera!';
+                    } else {
+                        $kapanLabel = 'hari ini';
+                        $judul      = 'Pengingat Jadwal Hari Ini!';
+                    }
 
                     Notifikasi::create([
-                        'user_id'             => $userId,
-                        'jadwal_id'           => $jadwal->id,
-                        'pengingat_waktu_id'  => $wt->id,
-                        'judul'               => 'Pengingat Jadwal ' . ($wt->offset_menit >= 1440 ? 'Besok' : 'Segera') . '!',
-                        'pesan'               => "Jangan lupa jadwal {$jadwal->jenis_pemeriksaan} {$hariLabel} jam {$waktuLabel} WIB di {$jadwal->fasilitas_klinik}.",
-                        'is_read'             => false,
-                        'notified_at'         => $reminderDt,
+                        'user_id'            => $userId,
+                        'jadwal_id'          => $jadwal->id,
+                        'pengingat_waktu_id' => $wt->id,
+                        'judul'              => $judul,
+                        'pesan'              => "Jangan lupa jadwal {$jadwal->jenis_pemeriksaan} {$kapanLabel} jam {$waktuLabel} WIB di {$jadwal->fasilitas_klinik}.",
+                        'is_read'            => false,
+                        'notified_at'        => $reminderDt,
                     ]);
                 }
             }

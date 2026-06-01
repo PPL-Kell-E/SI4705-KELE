@@ -318,15 +318,20 @@
         $firstWaktu = $p->waktu->first();
         $jadwal     = $p->jadwal;
         $waktuJam   = $jadwal ? substr($jadwal->waktu, 0, 5) : '00:00';
+        $isExpired  = $jadwal && $jadwal->status !== 'mendatang';
     @endphp
-    <div class="reminder-card {{ $p->is_active ? '' : 'inactive' }}" id="card-{{ $p->id }}">
+    <div class="reminder-card {{ ($p->is_active && !$isExpired) ? '' : 'inactive' }}" id="card-{{ $p->id }}">
         <div class="bell-icon-wrap">
             <i class="fas fa-bell"></i>
         </div>
         <div class="reminder-info">
             <div class="reminder-name">{{ $jadwal->jenis_pemeriksaan ?? '-' }}</div>
             <div class="reminder-meta">
-                @if($firstWaktu)
+                @if($isExpired)
+                <span class="chip" style="background:#fef2f2;border-color:#fca5a5;color:#b91c1c;">
+                    <i class="fas fa-check-circle"></i> Jadwal Selesai
+                </span>
+                @elseif($firstWaktu)
                 <span class="chip">
                     <i class="fas fa-calendar-plus"></i>
                     {{ $firstWaktu->chipLabel() }}
@@ -337,7 +342,7 @@
                     <i class="fas fa-clock"></i>
                     {{ $waktuJam }} WIB
                 </span>
-                @if($p->waktu->count() > 1)
+                @if(!$isExpired && $p->waktu->count() > 1)
                 <span style="font-size:12px;color:#7a9a90;">+{{ $p->waktu->count() - 1 }} lainnya</span>
                 @endif
             </div>
@@ -550,6 +555,18 @@
 <script>
 // ── Data from server ──
 const pengingatData = @json($pengingatJson);
+
+// Inisialisasi badge dari server-side count
+(function() {
+    const count = {{ $unreadCount }};
+    if (count > 0) {
+        const badge = document.getElementById('notifBadge');
+        if (badge) {
+            badge.textContent = count > 99 ? '99+' : count;
+            badge.classList.add('show');
+        }
+    }
+})();
 
 const offsetOptions = @json($offsetOptions);
 let currentEditId = null;
