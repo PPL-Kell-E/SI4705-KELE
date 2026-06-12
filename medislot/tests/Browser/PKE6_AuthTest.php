@@ -1,5 +1,5 @@
 <?php
-
+// PKE-6: Browser test untuk Registrasi dan Login
 namespace Tests\Browser;
 
 use App\Models\Profile;
