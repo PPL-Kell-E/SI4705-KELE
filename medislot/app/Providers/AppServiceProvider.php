@@ -7,7 +7,6 @@ use Illuminate\Support\Facades\View;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 use App\Models\Profile;
-
 class AppServiceProvider extends ServiceProvider
 {
     public function register(): void {}
