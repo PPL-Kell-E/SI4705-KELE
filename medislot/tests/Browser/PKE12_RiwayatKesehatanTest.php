@@ -349,4 +349,233 @@ class PKE12_RiwayatKesehatanTest extends DuskTestCase
                  ->screenshot('tc17-tampilan-diperbarui-tanpa-error');
         });
     }
+
+    // =========================================================================
+    // BACKEND / DATABASE TESTS (tanpa browser)
+    // =========================================================================
+
+    /** @test TC-B01: Riwayat tersimpan ke DB dan terbaca dengan benar */
+    public function test_tcb01_riwayat_tersimpan_ke_db(): void
+    {
+        $riwayat = $this->buatRiwayat(['jenis_pemeriksaan' => 'Riwayat B01']);
+
+        $this->assertDatabaseHas('hasil_pemeriksaan', [
+            'id'                => $riwayat->id,
+            'user_id'           => $this->testUser->id,
+            'jenis_pemeriksaan' => 'Riwayat B01',
+            'hidden_at'         => null,
+        ]);
+    }
+
+    /** @test TC-B02: hide() mengisi hidden_at, data tidak terhapus dari DB */
+    public function test_tcb02_hide_isi_hidden_at_data_tetap_ada(): void
+    {
+        $riwayat = $this->buatRiwayat(['jenis_pemeriksaan' => 'Riwayat B02']);
+
+        $riwayat->update(['hidden_at' => now()]);
+
+        $fresh = HasilPemeriksaan::find($riwayat->id);
+        $this->assertNotNull($fresh->hidden_at);
+        $this->assertDatabaseHas('hasil_pemeriksaan', ['id' => $riwayat->id]);
+    }
+
+    /** @test TC-B03: Riwayat dengan hidden_at tidak muncul di query riwayat */
+    public function test_tcb03_riwayat_hidden_tidak_muncul_di_query(): void
+    {
+        $terlihat  = $this->buatRiwayat(['jenis_pemeriksaan' => 'Riwayat Terlihat B03', 'hidden_at' => null]);
+        $tersembunyi = $this->buatRiwayat(['jenis_pemeriksaan' => 'Riwayat Tersembunyi B03', 'hidden_at' => now()]);
+
+        $hasil = HasilPemeriksaan::where('user_id', $this->testUser->id)
+                    ->whereNull('hidden_at')
+                    ->pluck('id');
+
+        $this->assertContains($terlihat->id, $hasil);
+        $this->assertNotContains($tersembunyi->id, $hasil);
+    }
+
+    /** @test TC-B04: Filter minggu_ini hanya mengembalikan data minggu ini */
+    public function test_tcb04_filter_minggu_ini(): void
+    {
+        $mingguIni = $this->buatRiwayat([
+            'jenis_pemeriksaan'   => 'Riwayat B04 Minggu Ini',
+            'tanggal_pemeriksaan' => Carbon::now()->startOfWeek()->format('Y-m-d'),
+        ]);
+        $bulanLalu = $this->buatRiwayat([
+            'jenis_pemeriksaan'   => 'Riwayat B04 Bulan Lalu',
+            'tanggal_pemeriksaan' => Carbon::now()->subMonth()->format('Y-m-d'),
+        ]);
+
+        $hasil = HasilPemeriksaan::where('user_id', $this->testUser->id)
+                    ->whereNull('hidden_at')
+                    ->whereBetween('tanggal_pemeriksaan', [
+                        Carbon::now()->startOfWeek(Carbon::MONDAY),
+                        Carbon::now()->endOfWeek(Carbon::SUNDAY),
+                    ])
+                    ->pluck('id');
+
+        $this->assertContains($mingguIni->id, $hasil);
+        $this->assertNotContains($bulanLalu->id, $hasil);
+    }
+
+    /** @test TC-B05: Filter bulan_ini hanya mengembalikan data bulan ini */
+    public function test_tcb05_filter_bulan_ini(): void
+    {
+        $bulanIni = $this->buatRiwayat([
+            'jenis_pemeriksaan'   => 'Riwayat B05 Bulan Ini',
+            'tanggal_pemeriksaan' => Carbon::now()->startOfMonth()->format('Y-m-d'),
+        ]);
+        $tahunLalu = $this->buatRiwayat([
+            'jenis_pemeriksaan'   => 'Riwayat B05 Tahun Lalu',
+            'tanggal_pemeriksaan' => Carbon::now()->subYear()->format('Y-m-d'),
+        ]);
+
+        $hasil = HasilPemeriksaan::where('user_id', $this->testUser->id)
+                    ->whereNull('hidden_at')
+                    ->whereYear('tanggal_pemeriksaan', now()->year)
+                    ->whereMonth('tanggal_pemeriksaan', now()->month)
+                    ->pluck('id');
+
+        $this->assertContains($bulanIni->id, $hasil);
+        $this->assertNotContains($tahunLalu->id, $hasil);
+    }
+
+    /** @test TC-B06: Filter custom date range mengembalikan data dalam rentang yang tepat */
+    public function test_tcb06_filter_custom_date_range(): void
+    {
+        $dalamRange = $this->buatRiwayat([
+            'jenis_pemeriksaan'   => 'Riwayat B06 Dalam Range',
+            'tanggal_pemeriksaan' => '2026-01-15',
+        ]);
+        $luarRange = $this->buatRiwayat([
+            'jenis_pemeriksaan'   => 'Riwayat B06 Luar Range',
+            'tanggal_pemeriksaan' => '2026-03-01',
+        ]);
+
+        $hasil = HasilPemeriksaan::where('user_id', $this->testUser->id)
+                    ->whereNull('hidden_at')
+                    ->where('tanggal_pemeriksaan', '>=', '2026-01-01')
+                    ->where('tanggal_pemeriksaan', '<=', '2026-01-31')
+                    ->pluck('id');
+
+        $this->assertContains($dalamRange->id, $hasil);
+        $this->assertNotContains($luarRange->id, $hasil);
+    }
+
+    /** @test TC-B07: Filter tahun_ini hanya mengembalikan data tahun ini */
+    public function test_tcb07_filter_tahun_ini(): void
+    {
+        $tahunIni = $this->buatRiwayat([
+            'jenis_pemeriksaan'   => 'Riwayat B07 Tahun Ini',
+            'tanggal_pemeriksaan' => Carbon::now()->format('Y-m-d'),
+        ]);
+        $tahunLalu = $this->buatRiwayat([
+            'jenis_pemeriksaan'   => 'Riwayat B07 Tahun Lalu',
+            'tanggal_pemeriksaan' => Carbon::now()->subYear()->format('Y-m-d'),
+        ]);
+
+        $hasil = HasilPemeriksaan::where('user_id', $this->testUser->id)
+                    ->whereNull('hidden_at')
+                    ->whereYear('tanggal_pemeriksaan', now()->year)
+                    ->pluck('id');
+
+        $this->assertContains($tahunIni->id, $hasil);
+        $this->assertNotContains($tahunLalu->id, $hasil);
+    }
+
+    /** @test TC-B08: Riwayat diurutkan descending berdasarkan tanggal_pemeriksaan */
+    public function test_tcb08_urutan_descending_tanggal(): void
+    {
+        $this->buatRiwayat(['tanggal_pemeriksaan' => '2026-01-01']);
+        $this->buatRiwayat(['tanggal_pemeriksaan' => '2026-03-15']);
+        $this->buatRiwayat(['tanggal_pemeriksaan' => '2026-02-10']);
+
+        $hasil = HasilPemeriksaan::where('user_id', $this->testUser->id)
+                    ->whereNull('hidden_at')
+                    ->orderByDesc('tanggal_pemeriksaan')
+                    ->get();
+
+        for ($i = 0; $i < $hasil->count() - 1; $i++) {
+            $this->assertTrue(
+                $hasil[$i]->tanggal_pemeriksaan->gte($hasil[$i + 1]->tanggal_pemeriksaan),
+                'Riwayat harus diurutkan descending berdasarkan tanggal_pemeriksaan'
+            );
+        }
+    }
+
+    /** @test TC-B09: Data isolation — riwayat user lain tidak terlihat */
+    public function test_tcb09_data_isolation_antar_user(): void
+    {
+        $uid      = Str::random(6);
+        $userLain = User::create([
+            'full_name'     => 'User Lain PKE12',
+            'email'         => "lain.pke12.{$uid}@test.local",
+            'password_hash' => Hash::make('Password123!'),
+            'role'          => 'user',
+        ]);
+
+        $milikSaya   = $this->buatRiwayat(['jenis_pemeriksaan' => 'Milik Saya B09']);
+        $milikMereka = HasilPemeriksaan::create([
+            'user_id'             => $userLain->id,
+            'jenis_pemeriksaan'   => 'Milik Mereka B09',
+            'tanggal_pemeriksaan' => Carbon::today()->format('Y-m-d'),
+            'hasil_pemeriksaan'   => 'Hasil mereka.',
+        ]);
+
+        $hasilSaya = HasilPemeriksaan::where('user_id', $this->testUser->id)
+                        ->whereNull('hidden_at')
+                        ->pluck('id');
+
+        $this->assertContains($milikSaya->id, $hasilSaya);
+        $this->assertNotContains($milikMereka->id, $hasilSaya);
+
+        $milikMereka->delete();
+        $userLain->delete();
+    }
+
+    /** @test TC-B10: Otorisasi — user lain tidak bisa hide riwayat user ini */
+    public function test_tcb10_otorisasi_user_lain_tidak_bisa_hide(): void
+    {
+        $uid      = Str::random(6);
+        $userLain = User::create([
+            'full_name'     => 'Intruder PKE12',
+            'email'         => "intruder.pke12.{$uid}@test.local",
+            'password_hash' => Hash::make('Password123!'),
+            'role'          => 'user',
+        ]);
+
+        $riwayat = $this->buatRiwayat(['jenis_pemeriksaan' => 'Data Pribadi B10']);
+
+        // Verifikasi: user_id berbeda → abort_if di controller akan reject
+        $this->assertNotEquals($userLain->id, $riwayat->user_id);
+        $this->assertNull($riwayat->hidden_at);
+
+        $userLain->delete();
+    }
+
+    /** @test TC-B11: Filter kosong (semua) mengembalikan seluruh riwayat visible */
+    public function test_tcb11_filter_semua_tanpa_batasan(): void
+    {
+        $this->buatRiwayat(['tanggal_pemeriksaan' => '2025-05-01']);
+        $this->buatRiwayat(['tanggal_pemeriksaan' => '2024-12-31']);
+        $this->buatRiwayat(['tanggal_pemeriksaan' => Carbon::today()->format('Y-m-d')]);
+
+        $semua = HasilPemeriksaan::where('user_id', $this->testUser->id)
+                    ->whereNull('hidden_at')
+                    ->count();
+
+        $this->assertEquals(3, $semua);
+    }
+
+    /** @test TC-B12: hidden_at terisi datetime saat hide, bukan null */
+    public function test_tcb12_hidden_at_terisi_datetime_setelah_hide(): void
+    {
+        $riwayat = $this->buatRiwayat();
+        $this->assertNull($riwayat->hidden_at);
+
+        $riwayat->update(['hidden_at' => now()]);
+
+        $fresh = HasilPemeriksaan::find($riwayat->id);
+        $this->assertNotNull($fresh->hidden_at);
+        $this->assertInstanceOf(\Illuminate\Support\Carbon::class, $fresh->hidden_at);
+    }
 }

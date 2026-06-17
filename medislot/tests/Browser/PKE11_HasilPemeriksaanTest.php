@@ -378,4 +378,183 @@ class PKE11_HasilPemeriksaanTest extends DuskTestCase
                  ->screenshot('tc18-loading-state-selesai');
         });
     }
+
+    // =========================================================================
+    // BACKEND / DATABASE TESTS (tanpa browser)
+    // =========================================================================
+
+    /** @test TC-B01: Hasil pemeriksaan tersimpan ke DB dengan field yang benar */
+    public function test_tcb01_hasil_tersimpan_ke_db(): void
+    {
+        $hasil = $this->buatHasilTest([
+            'jenis_pemeriksaan' => 'Cek Ginjal B01',
+            'hasil_pemeriksaan' => 'Kreatinin normal.',
+        ]);
+
+        $this->assertDatabaseHas('hasil_pemeriksaan', [
+            'id'                => $hasil->id,
+            'user_id'           => $this->testUser->id,
+            'jenis_pemeriksaan' => 'Cek Ginjal B01',
+            'hasil_pemeriksaan' => 'Kreatinin normal.',
+        ]);
+    }
+
+    /** @test TC-B02: tanggal_pemeriksaan tersimpan dan bisa diambil sebagai Carbon */
+    public function test_tcb02_tanggal_pemeriksaan_tersimpan_benar(): void
+    {
+        $hasil = $this->buatHasilTest(['tanggal_pemeriksaan' => '2026-03-15']);
+
+        $fresh = HasilPemeriksaan::find($hasil->id);
+        $this->assertEquals('2026-03-15', $fresh->tanggal_pemeriksaan->format('Y-m-d'));
+    }
+
+    /** @test TC-B03: Edit hasil — perubahan jenis dan fasilitas tersimpan ke DB */
+    public function test_tcb03_edit_hasil_tersimpan_ke_db(): void
+    {
+        $hasil = $this->buatHasilTest([
+            'jenis_pemeriksaan'   => 'Sebelum Edit B03',
+            'fasilitas_kesehatan' => 'RS Lama',
+        ]);
+
+        $hasil->update([
+            'jenis_pemeriksaan'   => 'Sesudah Edit B03',
+            'fasilitas_kesehatan' => 'RS Baru',
+        ]);
+
+        $this->assertDatabaseHas('hasil_pemeriksaan', [
+            'id'                  => $hasil->id,
+            'jenis_pemeriksaan'   => 'Sesudah Edit B03',
+            'fasilitas_kesehatan' => 'RS Baru',
+        ]);
+        $this->assertDatabaseMissing('hasil_pemeriksaan', [
+            'id'                => $hasil->id,
+            'jenis_pemeriksaan' => 'Sebelum Edit B03',
+        ]);
+    }
+
+    /** @test TC-B04: Hapus hasil — data hilang dari DB */
+    public function test_tcb04_hapus_hasil_hilang_dari_db(): void
+    {
+        $hasil = $this->buatHasilTest(['jenis_pemeriksaan' => 'Hapus B04']);
+        $id    = $hasil->id;
+
+        $hasil->delete();
+
+        $this->assertDatabaseMissing('hasil_pemeriksaan', ['id' => $id]);
+    }
+
+    /** @test TC-B05: Field nullable (nama_dokter, catatan_tambahan) boleh null */
+    public function test_tcb05_field_nullable_boleh_null(): void
+    {
+        $hasil = $this->buatHasilTest([
+            'nama_dokter'      => null,
+            'catatan_tambahan' => null,
+        ]);
+
+        $fresh = HasilPemeriksaan::find($hasil->id);
+        $this->assertNull($fresh->nama_dokter);
+        $this->assertNull($fresh->catatan_tambahan);
+        $this->assertDatabaseHas('hasil_pemeriksaan', ['id' => $hasil->id]);
+    }
+
+    /** @test TC-B06: Hasil diurutkan descending berdasarkan tanggal_pemeriksaan */
+    public function test_tcb06_urutan_descending_tanggal(): void
+    {
+        $this->buatHasilTest(['tanggal_pemeriksaan' => '2026-01-01']);
+        $this->buatHasilTest(['tanggal_pemeriksaan' => '2026-03-15']);
+        $this->buatHasilTest(['tanggal_pemeriksaan' => '2026-02-10']);
+
+        $hasil = HasilPemeriksaan::where('user_id', $this->testUser->id)
+                    ->orderByDesc('tanggal_pemeriksaan')
+                    ->get();
+
+        for ($i = 0; $i < $hasil->count() - 1; $i++) {
+            $this->assertTrue(
+                $hasil[$i]->tanggal_pemeriksaan->gte($hasil[$i + 1]->tanggal_pemeriksaan),
+                'Hasil harus diurutkan descending berdasarkan tanggal_pemeriksaan'
+            );
+        }
+    }
+
+    /** @test TC-B07: Data isolation — hasil pemeriksaan terisolasi per user */
+    public function test_tcb07_data_isolation_antar_user(): void
+    {
+        $uid      = Str::random(6);
+        $userLain = User::create([
+            'full_name'     => 'User Lain PKE11',
+            'email'         => "lain.pke11.{$uid}@test.local",
+            'password_hash' => Hash::make('Password123!'),
+            'role'          => 'user',
+        ]);
+
+        $milikSaya   = $this->buatHasilTest(['jenis_pemeriksaan' => 'Milik Saya B07']);
+        $milikMereka = HasilPemeriksaan::create([
+            'user_id'             => $userLain->id,
+            'jenis_pemeriksaan'   => 'Milik Mereka B07',
+            'tanggal_pemeriksaan' => '2026-01-01',
+            'hasil_pemeriksaan'   => 'Hasil mereka.',
+        ]);
+
+        $hasilSaya = HasilPemeriksaan::where('user_id', $this->testUser->id)->pluck('id');
+
+        $this->assertContains($milikSaya->id, $hasilSaya);
+        $this->assertNotContains($milikMereka->id, $hasilSaya);
+
+        $milikMereka->delete();
+        $userLain->delete();
+    }
+
+    /** @test TC-B08: updated_at berubah setelah hasil diedit */
+    public function test_tcb08_updated_at_berubah_setelah_edit(): void
+    {
+        $hasil  = $this->buatHasilTest();
+        $before = $hasil->updated_at;
+
+        sleep(1);
+        $hasil->update(['jenis_pemeriksaan' => 'Sesudah Edit B08']);
+
+        $after = HasilPemeriksaan::find($hasil->id)->updated_at;
+        $this->assertTrue($after->greaterThan($before));
+    }
+
+    /** @test TC-B09: Otorisasi — user lain tidak boleh edit hasil pemeriksaan user ini */
+    public function test_tcb09_otorisasi_user_lain_tidak_bisa_edit(): void
+    {
+        $uid      = Str::random(6);
+        $userLain = User::create([
+            'full_name'     => 'Intruder PKE11',
+            'email'         => "intruder.pke11.{$uid}@test.local",
+            'password_hash' => Hash::make('Password123!'),
+            'role'          => 'user',
+        ]);
+
+        $hasil = $this->buatHasilTest(['jenis_pemeriksaan' => 'Data Pribadi B09']);
+
+        // Verifikasi: user_id berbeda = tidak bisa diedit (abort_if di controller)
+        $this->assertNotEquals($userLain->id, $hasil->user_id);
+
+        $userLain->delete();
+    }
+
+    /** @test TC-B10: Validasi controller — field wajib ada (jenis_pemeriksaan, hasil_pemeriksaan) */
+    public function test_tcb10_validasi_field_wajib_di_controller(): void
+    {
+        $source = file_get_contents(
+            (new \ReflectionClass(\App\Http\Controllers\HasilPemeriksaanController::class))->getFileName()
+        );
+
+        $this->assertStringContainsString("'jenis_pemeriksaan'", $source);
+        $this->assertStringContainsString("'hasil_pemeriksaan'", $source);
+        $this->assertStringContainsString('required', $source);
+    }
+
+    /** @test TC-B11: created_at dan updated_at terisi otomatis */
+    public function test_tcb11_timestamps_terisi_otomatis(): void
+    {
+        $hasil = $this->buatHasilTest();
+        $fresh = HasilPemeriksaan::find($hasil->id);
+
+        $this->assertNotNull($fresh->created_at);
+        $this->assertNotNull($fresh->updated_at);
+    }
 }

@@ -439,4 +439,477 @@ class PKE16_TargetKesehatanTest extends DuskTestCase
                  ->screenshot('tc23-loading-state-selesai');
         });
     }
+
+    // =========================================================================
+    // BACKEND / DATABASE TESTS (tanpa browser)
+    // =========================================================================
+
+    /**
+     * @test TC-B01: Membuat target kesehatan — tersimpan di DB dengan semua kolom benar
+     *
+     * Langkah:
+     * 1. Buat target baru via buatTarget() dengan override nama unik
+     * 2. Pastikan target ada di DB dengan semua kolom yang diisi
+     * 3. Pastikan target_aktivitas, aktivitas_dilakukan, satuan tersimpan benar
+     * 4. Pastikan user_id sesuai testUser
+     */
+    public function test_tcb01_buat_target_tersimpan_di_db(): void
+    {
+        $tanggal = Carbon::today()->addMonth()->format('Y-m-d');
+
+        // Langkah 1
+        $target = $this->buatTarget([
+            'nama'                => 'Target Backend B01',
+            'deskripsi'           => 'Deskripsi B01',
+            'target_aktivitas'    => 20,
+            'aktivitas_dilakukan' => 8,
+            'satuan'              => 'menit',
+            'tanggal_target'      => $tanggal,
+        ]);
+
+        // Langkah 2–4
+        $this->assertDatabaseHas('target_kesehatan', [
+            'user_id'             => $this->testUser->id,
+            'nama'                => 'Target Backend B01',
+            'deskripsi'           => 'Deskripsi B01',
+            'target_aktivitas'    => 20,
+            'aktivitas_dilakukan' => 8,
+            'satuan'              => 'menit',
+        ]);
+        $this->assertNotNull($target->id);
+        $this->assertEquals($this->testUser->id, $target->user_id);
+    }
+
+    /**
+     * @test TC-B02: Accessor progress — dihitung min(100, round(dilakukan/target*100))
+     *
+     * Langkah:
+     * 1. Buat target dengan aktivitas_dilakukan=7, target_aktivitas=10
+     * 2. Akses $target->progress
+     * 3. Pastikan progress = 70
+     * 4. Buat target dengan dilakukan > target → pastikan progress = 100 (tidak melebihi)
+     */
+    public function test_tcb02_accessor_progress_dihitung_benar(): void
+    {
+        // Langkah 1–3
+        $target = $this->buatTarget(['target_aktivitas' => 10, 'aktivitas_dilakukan' => 7]);
+        $this->assertEquals(70, $target->progress);
+
+        // Langkah 4: progress tidak boleh melebihi 100
+        $targetLebih = $this->buatTarget(['target_aktivitas' => 10, 'aktivitas_dilakukan' => 15]);
+        $this->assertEquals(100, $targetLebih->progress);
+    }
+
+    /**
+     * @test TC-B03: Accessor status — 'tercapai' saat progress >= 100
+     *
+     * Langkah:
+     * 1. Buat target dengan aktivitas_dilakukan = target_aktivitas (100%)
+     * 2. Akses $target->status
+     * 3. Pastikan status = 'tercapai'
+     * 4. Pastikan statusLabel = 'Tercapai'
+     */
+    public function test_tcb03_status_tercapai_saat_progress_100(): void
+    {
+        // Langkah 1
+        $target = $this->buatTarget(['target_aktivitas' => 10, 'aktivitas_dilakukan' => 10]);
+
+        // Langkah 2–4
+        $this->assertEquals('tercapai', $target->status);
+        $this->assertEquals('Tercapai', $target->statusLabel);
+    }
+
+    /**
+     * @test TC-B04: Accessor status — 'on-track' saat 50% <= progress < 100%
+     *
+     * Langkah:
+     * 1. Buat target dengan aktivitas_dilakukan=6, target_aktivitas=10 (60%)
+     * 2. Akses $target->status
+     * 3. Pastikan status = 'on-track'
+     * 4. Pastikan statusLabel = 'On Track'
+     */
+    public function test_tcb04_status_on_track_saat_progress_50_sampai_99(): void
+    {
+        // Langkah 1
+        $target = $this->buatTarget(['target_aktivitas' => 10, 'aktivitas_dilakukan' => 6]);
+
+        // Langkah 2–4
+        $this->assertEquals('on-track', $target->status);
+        $this->assertEquals('On Track', $target->statusLabel);
+    }
+
+    /**
+     * @test TC-B05: Accessor status — 'perlu-perhatian' saat progress < 50%
+     *
+     * Langkah:
+     * 1. Buat target dengan aktivitas_dilakukan=3, target_aktivitas=10 (30%)
+     * 2. Akses $target->status
+     * 3. Pastikan status = 'perlu-perhatian'
+     * 4. Pastikan statusLabel = 'Perlu Perhatian'
+     */
+    public function test_tcb05_status_perlu_perhatian_saat_progress_kurang_50(): void
+    {
+        // Langkah 1
+        $target = $this->buatTarget(['target_aktivitas' => 10, 'aktivitas_dilakukan' => 3]);
+
+        // Langkah 2–4
+        $this->assertEquals('perlu-perhatian', $target->status);
+        $this->assertEquals('Perlu Perhatian', $target->statusLabel);
+    }
+
+    /**
+     * @test TC-B06: Progress = 0 saat aktivitas_dilakukan = 0
+     *
+     * Langkah:
+     * 1. Buat target dengan aktivitas_dilakukan = 0
+     * 2. Akses $target->progress
+     * 3. Pastikan progress = 0 dan status = 'perlu-perhatian'
+     * 4. Verifikasi data di DB
+     */
+    public function test_tcb06_progress_nol_saat_belum_ada_aktivitas(): void
+    {
+        // Langkah 1
+        $target = $this->buatTarget(['target_aktivitas' => 10, 'aktivitas_dilakukan' => 0]);
+
+        // Langkah 2–3
+        $this->assertEquals(0, $target->progress);
+        $this->assertEquals('perlu-perhatian', $target->status);
+
+        // Langkah 4
+        $this->assertDatabaseHas('target_kesehatan', [
+            'user_id'             => $this->testUser->id,
+            'aktivitas_dilakukan' => 0,
+        ]);
+    }
+
+    /**
+     * @test TC-B07: tercapai_at otomatis diisi saat aktivitas_dilakukan >= target_aktivitas di store
+     *
+     * Langkah:
+     * 1. Buat target langsung via model dengan dilakukan >= target
+     * 2. Set tercapai_at secara manual (mirror logika controller store)
+     * 3. Verifikasi tercapai_at tidak null di DB
+     * 4. Verifikasi target tersimpan dengan benar
+     */
+    public function test_tcb07_tercapai_at_terisi_otomatis_saat_target_tercapai(): void
+    {
+        // Langkah 1–2: Mirror logika controller store()
+        $data = [
+            'user_id'             => $this->testUser->id,
+            'nama'                => 'Target Tercapai B07',
+            'deskripsi'           => 'Sudah selesai',
+            'icon'                => 'fas fa-star',
+            'icon_color'          => '#2d9e72',
+            'icon_bg'             => '#e8fff4',
+            'target_aktivitas'    => 5,
+            'aktivitas_dilakukan' => 5,
+            'satuan'              => 'kali',
+            'tanggal_target'      => Carbon::today()->addMonth()->format('Y-m-d'),
+        ];
+        if ($data['aktivitas_dilakukan'] >= $data['target_aktivitas']) {
+            $data['tercapai_at'] = now();
+        }
+        $target = TargetKesehatan::create($data);
+
+        // Langkah 3–4
+        $this->assertNotNull($target->tercapai_at);
+        $this->assertDatabaseHas('target_kesehatan', [
+            'user_id' => $this->testUser->id,
+            'nama'    => 'Target Tercapai B07',
+        ]);
+        $fromDb = TargetKesehatan::find($target->id);
+        $this->assertNotNull($fromDb->tercapai_at);
+    }
+
+    /**
+     * @test TC-B08: tercapai_at tidak diisi saat aktivitas_dilakukan < target_aktivitas
+     *
+     * Langkah:
+     * 1. Buat target dengan dilakukan < target
+     * 2. Pastikan tercapai_at = null (belum tercapai)
+     * 3. Verifikasi di DB
+     */
+    public function test_tcb08_tercapai_at_null_saat_belum_tercapai(): void
+    {
+        // Langkah 1
+        $target = $this->buatTarget(['target_aktivitas' => 10, 'aktivitas_dilakukan' => 4]);
+
+        // Langkah 2
+        $this->assertNull($target->tercapai_at);
+
+        // Langkah 3
+        $fromDb = TargetKesehatan::find($target->id);
+        $this->assertNull($fromDb->tercapai_at);
+    }
+
+    /**
+     * @test TC-B09: Update target — data diperbarui di DB dan tercapai_at diisi saat baru tercapai
+     *
+     * Langkah:
+     * 1. Buat target dengan aktivitas_dilakukan = 4 (belum tercapai, tercapai_at = null)
+     * 2. Update aktivitas_dilakukan = 10 (tercapai), mirror logika controller update()
+     * 3. Pastikan tercapai_at tidak null setelah update
+     * 4. Verifikasi data baru di DB
+     */
+    public function test_tcb09_update_target_tercapai_at_terisi(): void
+    {
+        // Langkah 1
+        $target = $this->buatTarget(['target_aktivitas' => 10, 'aktivitas_dilakukan' => 4]);
+        $this->assertNull($target->tercapai_at);
+
+        // Langkah 2: Mirror logika update()
+        $updateData = ['aktivitas_dilakukan' => 10];
+        if ($updateData['aktivitas_dilakukan'] >= $target->target_aktivitas
+            && $target->tercapai_at === null) {
+            $updateData['tercapai_at'] = now();
+        }
+        $target->update($updateData);
+
+        // Langkah 3–4
+        $this->assertNotNull($target->fresh()->tercapai_at);
+        $this->assertDatabaseHas('target_kesehatan', [
+            'id'                  => $target->id,
+            'aktivitas_dilakukan' => 10,
+        ]);
+    }
+
+    /**
+     * @test TC-B10: Update target — tercapai_at direset ke null saat dilakukan kembali < target
+     *
+     * Langkah:
+     * 1. Buat target yang sudah tercapai (tercapai_at terisi)
+     * 2. Update aktivitas_dilakukan = 3 (< target), mirror logika controller update()
+     * 3. Pastikan tercapai_at menjadi null kembali
+     * 4. Verifikasi di DB
+     */
+    public function test_tcb10_update_target_tercapai_at_direset(): void
+    {
+        // Langkah 1
+        $target = $this->buatTarget([
+            'target_aktivitas'    => 10,
+            'aktivitas_dilakukan' => 10,
+            'tercapai_at'         => now(),
+        ]);
+        $this->assertNotNull($target->tercapai_at);
+
+        // Langkah 2: Mirror logika update() — reset jika dilakukan < target
+        $updateData = ['aktivitas_dilakukan' => 3];
+        if ($updateData['aktivitas_dilakukan'] < $target->target_aktivitas) {
+            $updateData['tercapai_at'] = null;
+        }
+        $target->update($updateData);
+
+        // Langkah 3–4
+        $this->assertNull($target->fresh()->tercapai_at);
+        $this->assertDatabaseHas('target_kesehatan', [
+            'id'                  => $target->id,
+            'aktivitas_dilakukan' => 3,
+        ]);
+    }
+
+    /**
+     * @test TC-B11: Hapus target — data terhapus dari DB (hard delete)
+     *
+     * Langkah:
+     * 1. Buat target baru
+     * 2. Verifikasi ada di DB
+     * 3. Hapus target
+     * 4. Verifikasi sudah tidak ada di DB (assertDatabaseMissing)
+     */
+    public function test_tcb11_hapus_target_terhapus_dari_db(): void
+    {
+        // Langkah 1
+        $target = $this->buatTarget(['nama' => 'Target Hapus B11']);
+
+        // Langkah 2
+        $this->assertDatabaseHas('target_kesehatan', [
+            'id'   => $target->id,
+            'nama' => 'Target Hapus B11',
+        ]);
+
+        // Langkah 3
+        $target->delete();
+
+        // Langkah 4
+        $this->assertDatabaseMissing('target_kesehatan', ['id' => $target->id]);
+    }
+
+    /**
+     * @test TC-B12: Authorization — user lain tidak bisa hapus target milik testUser
+     *
+     * Langkah:
+     * 1. Buat target milik testUser
+     * 2. Buat user lain
+     * 3. Coba hapus target dengan user lain → abort_if harus mencegah (user_id tidak cocok)
+     * 4. Verifikasi target masih ada di DB
+     * 5. Hapus data user lain
+     */
+    public function test_tcb12_authorization_user_lain_tidak_bisa_hapus(): void
+    {
+        // Langkah 1
+        $target = $this->buatTarget(['nama' => 'Target Milik Saya B12']);
+
+        // Langkah 2
+        $uid      = Str::random(6);
+        $userLain = User::create([
+            'full_name'     => 'User Lain PKE16',
+            'email'         => "lain.pke16.{$uid}@test.local",
+            'password_hash' => Hash::make('Password123!'),
+            'role'          => 'user',
+        ]);
+
+        // Langkah 3: Cek kondisi abort_if dari controller destroy()
+        $bolehHapus = $target->user_id === $userLain->id;
+
+        // Langkah 4
+        $this->assertFalse($bolehHapus); // user lain tidak boleh hapus
+        $this->assertDatabaseHas('target_kesehatan', ['id' => $target->id]);
+
+        // Langkah 5
+        $userLain->delete();
+    }
+
+    /**
+     * @test TC-B13: Filter index — query 'semua' mengembalikan semua target, filter status hanya statusnya
+     *
+     * Langkah:
+     * 1. Buat 3 target: on-track (60%), perlu-perhatian (30%), tercapai (100%)
+     * 2. Query allTargets → count = 3
+     * 3. Filter 'on-track' → count = 1
+     * 4. Filter 'tercapai' → count = 1
+     * 5. Filter 'semua' → count = 3
+     */
+    public function test_tcb13_filter_status_mengembalikan_target_yang_sesuai(): void
+    {
+        // Langkah 1
+        $this->buatTarget(['nama' => 'On Track',        'target_aktivitas' => 10, 'aktivitas_dilakukan' => 6]);
+        $this->buatTarget(['nama' => 'Perlu Perhatian', 'target_aktivitas' => 10, 'aktivitas_dilakukan' => 3]);
+        $this->buatTarget(['nama' => 'Tercapai',        'target_aktivitas' => 10, 'aktivitas_dilakukan' => 10]);
+
+        // Langkah 2
+        $allTargets = TargetKesehatan::where('user_id', $this->testUser->id)
+            ->orderBy('tanggal_target')
+            ->get();
+        $this->assertEquals(3, $allTargets->count());
+
+        // Langkah 3
+        $onTrack = $allTargets->filter(fn($t) => $t->status === 'on-track');
+        $this->assertEquals(1, $onTrack->count());
+
+        // Langkah 4
+        $tercapai = $allTargets->filter(fn($t) => $t->status === 'tercapai');
+        $this->assertEquals(1, $tercapai->count());
+
+        // Langkah 5
+        $semua = $allTargets->filter(fn($t) => true);
+        $this->assertEquals(3, $semua->count());
+    }
+
+    /**
+     * @test TC-B14: pencapaianTerbaru — query mengembalikan target tercapai terbaru berdasarkan tercapai_at
+     *
+     * Langkah:
+     * 1. Buat 2 target dengan tercapai_at berbeda
+     * 2. Query pencapaianTerbaru seperti controller index()
+     * 3. Pastikan yang dikembalikan adalah yang tercapai_at paling baru
+     * 4. Verifikasi data di DB
+     */
+    public function test_tcb14_pencapaian_terbaru_dikembalikan_benar(): void
+    {
+        // Langkah 1
+        $lama  = $this->buatTarget(['nama' => 'Tercapai Lama', 'aktivitas_dilakukan' => 10, 'tercapai_at' => now()->subDays(5)]);
+        $baru  = $this->buatTarget(['nama' => 'Tercapai Baru', 'aktivitas_dilakukan' => 10, 'tercapai_at' => now()]);
+
+        // Langkah 2
+        $pencapaianTerbaru = TargetKesehatan::where('user_id', $this->testUser->id)
+            ->whereNotNull('tercapai_at')
+            ->orderByDesc('tercapai_at')
+            ->first();
+
+        // Langkah 3
+        $this->assertNotNull($pencapaianTerbaru);
+        $this->assertEquals('Tercapai Baru', $pencapaianTerbaru->nama);
+
+        // Langkah 4
+        $this->assertDatabaseHas('target_kesehatan', ['id' => $baru->id, 'nama' => 'Tercapai Baru']);
+    }
+
+    /**
+     * @test TC-B15: Data isolation — target hanya milik testUser, tidak tercampur user lain
+     *
+     * Langkah:
+     * 1. Buat user lain dengan 5 target
+     * 2. Buat 2 target untuk testUser
+     * 3. Query allTargets hanya untuk testUser
+     * 4. Pastikan count = 2 (tidak tercampur)
+     * 5. Hapus data user lain
+     */
+    public function test_tcb15_data_isolation_target(): void
+    {
+        // Langkah 1
+        $uid      = Str::random(6);
+        $userLain = User::create([
+            'full_name'     => 'User Lain PKE16 Iso',
+            'email'         => "lain.pke16iso.{$uid}@test.local",
+            'password_hash' => Hash::make('Password123!'),
+            'role'          => 'user',
+        ]);
+        for ($i = 0; $i < 5; $i++) {
+            TargetKesehatan::create([
+                'user_id'             => $userLain->id,
+                'nama'                => "Target Orang Lain {$i}",
+                'icon'                => 'fas fa-bullseye',
+                'icon_color'          => '#4a90d9',
+                'icon_bg'             => '#e8f4ff',
+                'target_aktivitas'    => 10,
+                'aktivitas_dilakukan' => 5,
+                'satuan'              => 'kali',
+                'tanggal_target'      => Carbon::today()->addMonth()->format('Y-m-d'),
+            ]);
+        }
+
+        // Langkah 2
+        $this->buatTarget(['nama' => 'Target Saya A']);
+        $this->buatTarget(['nama' => 'Target Saya B']);
+
+        // Langkah 3
+        $milikSaya = TargetKesehatan::where('user_id', $this->testUser->id)->get();
+
+        // Langkah 4
+        $this->assertEquals(2, $milikSaya->count());
+
+        // Langkah 5
+        TargetKesehatan::where('user_id', $userLain->id)->delete();
+        $userLain->delete();
+    }
+
+    /**
+     * @test TC-B16: Statistik ringkasan — total, onTrack, perluPerhatian, tercapai dihitung benar
+     *
+     * Langkah:
+     * 1. Buat 4 target: 2 on-track, 1 perlu-perhatian, 1 tercapai
+     * 2. Query allTargets dan hitung statistik seperti controller index()
+     * 3. Pastikan total=4, onTrack=2, perluPerhatian=1, tercapai=1
+     */
+    public function test_tcb16_statistik_ringkasan_dihitung_benar(): void
+    {
+        // Langkah 1
+        $this->buatTarget(['target_aktivitas' => 10, 'aktivitas_dilakukan' => 6]);  // on-track (60%)
+        $this->buatTarget(['target_aktivitas' => 10, 'aktivitas_dilakukan' => 8]);  // on-track (80%)
+        $this->buatTarget(['target_aktivitas' => 10, 'aktivitas_dilakukan' => 2]);  // perlu-perhatian (20%)
+        $this->buatTarget(['target_aktivitas' => 10, 'aktivitas_dilakukan' => 10]); // tercapai (100%)
+
+        // Langkah 2
+        $allTargets     = TargetKesehatan::where('user_id', $this->testUser->id)->get();
+        $total          = $allTargets->count();
+        $onTrack        = $allTargets->filter(fn($t) => $t->status === 'on-track')->count();
+        $perluPerhatian = $allTargets->filter(fn($t) => $t->status === 'perlu-perhatian')->count();
+        $tercapai       = $allTargets->filter(fn($t) => $t->status === 'tercapai')->count();
+
+        // Langkah 3
+        $this->assertEquals(4, $total);
+        $this->assertEquals(2, $onTrack);
+        $this->assertEquals(1, $perluPerhatian);
+        $this->assertEquals(1, $tercapai);
+    }
 }

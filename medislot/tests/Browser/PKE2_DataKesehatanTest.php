@@ -591,4 +591,224 @@ class PKE2_DataKesehatanTest extends DuskTestCase
                     ->screenshot('tc21-cetak-pdf');
         });
     }
+
+    // =========================================================================
+    // BACKEND / DATABASE TESTS (tanpa browser)
+    // =========================================================================
+
+    /** @test TC-B01: Data health tersimpan ke tabel health_data dengan field yang benar */
+    public function test_tcb01_data_tersimpan_ke_tabel_health_data(): void
+    {
+        HealthData::updateOrCreate(
+            ['user_id' => $this->testUser->id],
+            [
+                'height_cm'   => 170,
+                'weight_kg'   => 65,
+                'blood_type'  => 'A',
+                'recorded_at' => now(),
+            ]
+        );
+
+        $this->assertDatabaseHas('health_data', [
+            'user_id'    => $this->testUser->id,
+            'blood_type' => 'A',
+        ]);
+
+        $record = HealthData::where('user_id', $this->testUser->id)->first();
+        $this->assertEquals(170, (float) $record->height_cm);
+        $this->assertEquals(65,  (float) $record->weight_kg);
+    }
+
+    /** @test TC-B02: updateOrCreate tidak membuat duplikat — hanya 1 record per user */
+    public function test_tcb02_update_or_create_tidak_duplikat(): void
+    {
+        HealthData::updateOrCreate(
+            ['user_id' => $this->testUser->id],
+            ['height_cm' => 160, 'weight_kg' => 55, 'recorded_at' => now()]
+        );
+        HealthData::updateOrCreate(
+            ['user_id' => $this->testUser->id],
+            ['height_cm' => 175, 'weight_kg' => 72, 'recorded_at' => now()]
+        );
+
+        $count = HealthData::where('user_id', $this->testUser->id)->count();
+        $this->assertEquals(1, $count, 'Harus hanya ada 1 record health_data per user');
+
+        $this->assertDatabaseHas('health_data', [
+            'user_id'   => $this->testUser->id,
+            'height_cm' => 175,
+            'weight_kg' => 72,
+        ]);
+    }
+
+    /** @test TC-B03: Field height_cm dan weight_kg tersimpan sebagai numeric */
+    public function test_tcb03_height_weight_tersimpan_sebagai_numeric(): void
+    {
+        $this->createHealthData(['height_cm' => 168, 'weight_kg' => 60]);
+
+        $record = HealthData::where('user_id', $this->testUser->id)->first();
+        $this->assertIsNumeric($record->height_cm);
+        $this->assertIsNumeric($record->weight_kg);
+        $this->assertEquals(168, (float) $record->height_cm);
+        $this->assertEquals(60,  (float) $record->weight_kg);
+    }
+
+    /** @test TC-B04: Allergies dari string CSV disimpan sebagai JSON array */
+    public function test_tcb04_allergies_disimpan_sebagai_array(): void
+    {
+        $allergies = array_map('trim', explode(',', 'Debu, Serbuk Bunga, Kacang'));
+
+        HealthData::updateOrCreate(
+            ['user_id' => $this->testUser->id],
+            ['allergies' => $allergies, 'recorded_at' => now()]
+        );
+
+        $record = HealthData::where('user_id', $this->testUser->id)->first();
+        $this->assertIsArray($record->allergies);
+        $this->assertContains('Debu', $record->allergies);
+        $this->assertContains('Serbuk Bunga', $record->allergies);
+        $this->assertContains('Kacang', $record->allergies);
+    }
+
+    /** @test TC-B05: Chronic conditions disimpan sebagai JSON array */
+    public function test_tcb05_chronic_conditions_disimpan_sebagai_array(): void
+    {
+        $conditions = array_map('trim', explode(',', 'Asma, Diabetes'));
+
+        HealthData::updateOrCreate(
+            ['user_id' => $this->testUser->id],
+            ['chronic_conditions' => $conditions, 'recorded_at' => now()]
+        );
+
+        $record = HealthData::where('user_id', $this->testUser->id)->first();
+        $this->assertIsArray($record->chronic_conditions);
+        $this->assertContains('Asma', $record->chronic_conditions);
+        $this->assertContains('Diabetes', $record->chronic_conditions);
+    }
+
+    /** @test TC-B06: Field nullable (height, weight, blood_type) boleh null tanpa error */
+    public function test_tcb06_field_nullable_boleh_null(): void
+    {
+        HealthData::updateOrCreate(
+            ['user_id' => $this->testUser->id],
+            [
+                'height_cm'   => null,
+                'weight_kg'   => null,
+                'blood_type'  => null,
+                'recorded_at' => now(),
+            ]
+        );
+
+        $record = HealthData::where('user_id', $this->testUser->id)->first();
+        $this->assertNotNull($record, 'Record harus tetap tersimpan meski field null');
+        $this->assertNull($record->height_cm);
+        $this->assertNull($record->weight_kg);
+        $this->assertNull($record->blood_type);
+    }
+
+    /** @test TC-B07: allergies kosong tersimpan sebagai array kosong bukan null */
+    public function test_tcb07_allergies_kosong_tersimpan_sebagai_array_kosong(): void
+    {
+        HealthData::updateOrCreate(
+            ['user_id' => $this->testUser->id],
+            ['allergies' => [], 'recorded_at' => now()]
+        );
+
+        $record = HealthData::where('user_id', $this->testUser->id)->first();
+        $this->assertIsArray($record->allergies);
+        $this->assertEmpty($record->allergies);
+    }
+
+    /** @test TC-B08: BMI dihitung otomatis dari height dan weight */
+    public function test_tcb08_bmi_dihitung_otomatis(): void
+    {
+        $this->createHealthData(['height_cm' => 170, 'weight_kg' => 65]);
+
+        $record = HealthData::where('user_id', $this->testUser->id)->first();
+
+        // BMI = 65 / (1.70^2) = 22.5
+        $expectedBmi = round(65 / (1.70 * 1.70), 1);
+        $this->assertEquals($expectedBmi, $record->bmi);
+    }
+
+    /** @test TC-B09: Kategori BMI Normal untuk TB 170 BB 65 */
+    public function test_tcb09_kategori_bmi_normal(): void
+    {
+        $this->createHealthData(['height_cm' => 170, 'weight_kg' => 65]);
+
+        $record = HealthData::where('user_id', $this->testUser->id)->first();
+        $this->assertEquals('Normal', $record->bmi_category);
+    }
+
+    /** @test TC-B10: Kategori BMI Kekurangan Berat Badan untuk BB sangat rendah */
+    public function test_tcb10_kategori_bmi_kekurangan(): void
+    {
+        $this->createHealthData(['height_cm' => 170, 'weight_kg' => 45]);
+
+        $record = HealthData::where('user_id', $this->testUser->id)->first();
+        $this->assertEquals('Kekurangan Berat Badan', $record->bmi_category);
+    }
+
+    /** @test TC-B11: Kategori BMI Obesitas untuk BB sangat tinggi */
+    public function test_tcb11_kategori_bmi_obesitas(): void
+    {
+        $this->createHealthData(['height_cm' => 170, 'weight_kg' => 100]);
+
+        $record = HealthData::where('user_id', $this->testUser->id)->first();
+        $this->assertEquals('Obesitas', $record->bmi_category);
+    }
+
+    /** @test TC-B12: BMI null jika height atau weight tidak diisi */
+    public function test_tcb12_bmi_null_jika_height_atau_weight_kosong(): void
+    {
+        $this->createHealthData(['height_cm' => null, 'weight_kg' => null]);
+
+        $record = HealthData::where('user_id', $this->testUser->id)->first();
+        $this->assertNull($record->bmi);
+        $this->assertEquals('-', $record->bmi_category);
+    }
+
+    /** @test TC-B13: recorded_at tersimpan sebagai datetime yang valid */
+    public function test_tcb13_recorded_at_tersimpan_sebagai_datetime(): void
+    {
+        $waktu = now();
+        $this->createHealthData(['recorded_at' => $waktu]);
+
+        $record = HealthData::where('user_id', $this->testUser->id)->first();
+        $this->assertNotNull($record->recorded_at);
+        $this->assertInstanceOf(\Illuminate\Support\Carbon::class, $record->recorded_at);
+    }
+
+    /** @test TC-B14: Data update tidak mengubah health_data user lain */
+    public function test_tcb14_update_tidak_mengubah_data_user_lain(): void
+    {
+        $uniqueId = Str::random(8);
+        $other    = User::create([
+            'full_name'     => 'User Lain PKE2',
+            'email'         => "other.pke2.{$uniqueId}@test.local",
+            'password_hash' => Hash::make('Password123!'),
+            'role'          => 'user',
+        ]);
+        HealthData::create([
+            'user_id'    => $other->id,
+            'height_cm'  => 155,
+            'weight_kg'  => 50,
+            'recorded_at'=> now(),
+        ]);
+
+        // Update data testUser
+        HealthData::updateOrCreate(
+            ['user_id' => $this->testUser->id],
+            ['height_cm' => 180, 'weight_kg' => 80, 'recorded_at' => now()]
+        );
+
+        // Data user lain tidak berubah
+        $otherRecord = HealthData::where('user_id', $other->id)->first();
+        $this->assertEquals(155, (float) $otherRecord->height_cm);
+        $this->assertEquals(50,  (float) $otherRecord->weight_kg);
+
+        // Cleanup
+        HealthData::where('user_id', $other->id)->delete();
+        $other->delete();
+    }
 }
