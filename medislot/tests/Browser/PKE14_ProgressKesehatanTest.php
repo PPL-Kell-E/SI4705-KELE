@@ -313,4 +313,401 @@ class PKE14_ProgressKesehatanTest extends DuskTestCase
                  ->screenshot('tc16-grafik-diperbarui-tanpa-error');
         });
     }
+
+    // =========================================================================
+    // BACKEND / DATABASE TESTS (tanpa browser)
+    // =========================================================================
+
+    /**
+     * @test TC-B01: Progress konsistensi bulan ini — dihitung dari selesai / total × 100
+     *
+     * Langkah:
+     * 1. Buat 3 jadwal selesai dan 1 jadwal mendatang di bulan ini
+     * 2. Query seperti InsightController::progress()
+     * 3. Hitung progressPersen
+     * 4. Pastikan hasilnya 75%
+     */
+    public function test_tcb01_progress_konsistensi_dihitung_benar(): void
+    {
+        $today = Carbon::today();
+
+        // Langkah 1
+        $this->buatJadwal(['status' => 'selesai',   'tanggal' => $today->copy()->format('Y-m-d')]);
+        $this->buatJadwal(['status' => 'selesai',   'tanggal' => $today->copy()->addDays(1)->format('Y-m-d')]);
+        $this->buatJadwal(['status' => 'selesai',   'tanggal' => $today->copy()->addDays(2)->format('Y-m-d')]);
+        $this->buatJadwal(['status' => 'mendatang', 'tanggal' => $today->copy()->addDays(10)->format('Y-m-d')]);
+
+        // Langkah 2
+        $bulanIniJadwal  = Jadwal::where('user_id', $this->testUser->id)
+            ->whereYear('tanggal', $today->year)
+            ->whereMonth('tanggal', $today->month)
+            ->get();
+        $totalBulanIni   = $bulanIniJadwal->count();
+        $selesaiBulanIni = $bulanIniJadwal->where('status', 'selesai')->count();
+
+        // Langkah 3
+        $progressPersen = $totalBulanIni > 0 ? round($selesaiBulanIni / $totalBulanIni * 100) : 0;
+
+        // Langkah 4
+        $this->assertEquals(75, $progressPersen);
+        $this->assertEquals(3, $selesaiBulanIni);
+        $this->assertEquals(4, $totalBulanIni);
+    }
+
+    /**
+     * @test TC-B02: Progress = 0 saat tidak ada jadwal bulan ini (no division by zero)
+     *
+     * Langkah:
+     * 1. Tidak buat jadwal apapun
+     * 2. Hitung progressPersen dengan logika controller
+     * 3. Pastikan hasilnya 0, totalBulanIni = 0
+     */
+    public function test_tcb02_progress_nol_tanpa_jadwal(): void
+    {
+        // Langkah 1: Tidak ada jadwal
+
+        // Langkah 2
+        $today          = Carbon::today();
+        $bulanIniJadwal = Jadwal::where('user_id', $this->testUser->id)
+            ->whereYear('tanggal', $today->year)
+            ->whereMonth('tanggal', $today->month)
+            ->get();
+        $totalBulanIni   = $bulanIniJadwal->count();
+        $selesaiBulanIni = $bulanIniJadwal->where('status', 'selesai')->count();
+        $progressPersen  = $totalBulanIni > 0 ? round($selesaiBulanIni / $totalBulanIni * 100) : 0;
+
+        // Langkah 3
+        $this->assertEquals(0, $progressPersen);
+        $this->assertEquals(0, $totalBulanIni);
+    }
+
+    /**
+     * @test TC-B03: computeStreak — dihitung dari hari ini mundur per tanggal unik berturut-turut
+     *
+     * Langkah:
+     * 1. Buat jadwal selesai hari ini
+     * 2. Buat jadwal selesai kemarin
+     * 3. Tidak ada jadwal selesai 2 hari lalu (streak berhenti)
+     * 4. Jalankan logika computeStreak dari controller
+     * 5. Pastikan streak = 2
+     */
+    public function test_tcb03_compute_streak_berurutan(): void
+    {
+        $today = Carbon::today();
+
+        // Langkah 1–3
+        $this->buatJadwal(['status' => 'selesai', 'tanggal' => $today->copy()->format('Y-m-d')]);
+        $this->buatJadwal(['status' => 'selesai', 'tanggal' => $today->copy()->subDay()->format('Y-m-d')]);
+        // 2 hari lalu tidak ada → streak berhenti
+
+        // Langkah 4: Logika computeStreak dari InsightController
+        $completedDates = Jadwal::where('user_id', $this->testUser->id)
+            ->where('status', 'selesai')
+            ->orderBy('tanggal', 'desc')
+            ->pluck('tanggal')
+            ->map(fn($d) => Carbon::parse($d)->toDateString())
+            ->unique()
+            ->values();
+
+        $streak = 0;
+        $check  = Carbon::today();
+        foreach ($completedDates as $date) {
+            $d = Carbon::parse($date);
+            if ($d->toDateString() === $check->toDateString()) {
+                $streak++;
+                $check->subDay();
+            } elseif ($d->lt($check)) {
+                break;
+            }
+        }
+
+        // Langkah 5
+        $this->assertEquals(2, $streak);
+    }
+
+    /**
+     * @test TC-B04: Streak = 0 saat tidak ada jadwal selesai hari ini
+     *
+     * Langkah:
+     * 1. Buat jadwal selesai kemarin (bukan hari ini)
+     * 2. Jalankan computeStreak
+     * 3. Streak harus = 0 karena hari ini tidak ada jadwal selesai
+     */
+    public function test_tcb04_streak_nol_tanpa_selesai_hari_ini(): void
+    {
+        // Langkah 1
+        $this->buatJadwal([
+            'status'  => 'selesai',
+            'tanggal' => Carbon::yesterday()->format('Y-m-d'),
+        ]);
+
+        // Langkah 2
+        $completedDates = Jadwal::where('user_id', $this->testUser->id)
+            ->where('status', 'selesai')
+            ->orderBy('tanggal', 'desc')
+            ->pluck('tanggal')
+            ->map(fn($d) => Carbon::parse($d)->toDateString())
+            ->unique()
+            ->values();
+
+        $streak = 0;
+        $check  = Carbon::today();
+        foreach ($completedDates as $date) {
+            $d = Carbon::parse($date);
+            if ($d->toDateString() === $check->toDateString()) {
+                $streak++;
+                $check->subDay();
+            } elseif ($d->lt($check)) {
+                break;
+            }
+        }
+
+        // Langkah 3
+        $this->assertEquals(0, $streak);
+    }
+
+    /**
+     * @test TC-B05: Jadwal mendatang berikutnya — query mengembalikan jadwal paling awal
+     *
+     * Langkah:
+     * 1. Buat 3 jadwal mendatang dengan tanggal berbeda
+     * 2. Query nextJadwal seperti controller (order tanggal ASC, first)
+     * 3. Pastikan yang dikembalikan adalah jadwal paling awal
+     */
+    public function test_tcb05_next_jadwal_paling_awal(): void
+    {
+        $today = Carbon::today();
+
+        // Langkah 1
+        $this->buatJadwal(['status' => 'mendatang', 'tanggal' => $today->copy()->addDays(7)->format('Y-m-d'),  'jenis_pemeriksaan' => 'Jadwal Minggu Depan']);
+        $this->buatJadwal(['status' => 'mendatang', 'tanggal' => $today->copy()->addDays(2)->format('Y-m-d'),  'jenis_pemeriksaan' => 'Jadwal 2 Hari Lagi']);
+        $this->buatJadwal(['status' => 'mendatang', 'tanggal' => $today->copy()->addDays(14)->format('Y-m-d'), 'jenis_pemeriksaan' => 'Jadwal 2 Minggu Lagi']);
+
+        // Langkah 2
+        $nextJadwal = Jadwal::where('user_id', $this->testUser->id)
+            ->where('status', 'mendatang')
+            ->where('tanggal', '>=', $today)
+            ->orderBy('tanggal', 'asc')
+            ->orderBy('waktu', 'asc')
+            ->first();
+
+        // Langkah 3
+        $this->assertNotNull($nextJadwal);
+        $this->assertEquals('Jadwal 2 Hari Lagi', $nextJadwal->jenis_pemeriksaan);
+    }
+
+    /**
+     * @test TC-B06: Jadwal dalam periode terpilih — filter tanggal >= startDate berfungsi
+     *
+     * Langkah:
+     * 1. Set periode = 1_bulan (30 hari ke belakang)
+     * 2. Buat jadwal 10 hari lalu (masuk periode)
+     * 3. Buat jadwal 60 hari lalu (di luar periode)
+     * 4. Query jadwalPeriode seperti controller
+     * 5. Pastikan hanya jadwal dalam periode yang dikembalikan
+     */
+    public function test_tcb06_filter_periode_30_hari(): void
+    {
+        $today     = Carbon::today();
+        $startDate = $today->copy()->subDays(30);
+
+        // Langkah 2–3
+        $dalamPeriode = $this->buatJadwal(['tanggal' => $today->copy()->subDays(10)->format('Y-m-d')]);
+        $luarPeriode  = $this->buatJadwal(['tanggal' => $today->copy()->subDays(60)->format('Y-m-d')]);
+
+        // Langkah 4
+        $jadwalPeriode = Jadwal::where('user_id', $this->testUser->id)
+            ->where('tanggal', '>=', $startDate)
+            ->orderBy('tanggal', 'asc')
+            ->pluck('id');
+
+        // Langkah 5
+        $this->assertContains($dalamPeriode->id, $jadwalPeriode);
+        $this->assertNotContains($luarPeriode->id, $jadwalPeriode);
+    }
+
+    /**
+     * @test TC-B07: Statistik periode — total, selesai, pending dihitung benar dari DB
+     *
+     * Langkah:
+     * 1. Buat 3 jadwal selesai dan 2 jadwal mendatang dalam periode 6 bulan
+     * 2. Query jadwalPeriode dan hitung statistik
+     * 3. Pastikan total = 5, selesai = 3, pending = 2
+     * 4. Pastikan selesaiPersen = 60%, pendingPersen = 40%
+     */
+    public function test_tcb07_statistik_periode_dihitung_benar(): void
+    {
+        $today     = Carbon::today();
+        $startDate = $today->copy()->subDays(180);
+
+        // Langkah 1
+        $this->buatJadwal(['status' => 'selesai',   'tanggal' => $today->copy()->subDays(5)->format('Y-m-d')]);
+        $this->buatJadwal(['status' => 'selesai',   'tanggal' => $today->copy()->subDays(10)->format('Y-m-d')]);
+        $this->buatJadwal(['status' => 'selesai',   'tanggal' => $today->copy()->subDays(15)->format('Y-m-d')]);
+        $this->buatJadwal(['status' => 'mendatang', 'tanggal' => $today->copy()->addDays(5)->format('Y-m-d')]);
+        $this->buatJadwal(['status' => 'mendatang', 'tanggal' => $today->copy()->addDays(10)->format('Y-m-d')]);
+
+        // Langkah 2
+        $jadwalPeriode  = Jadwal::where('user_id', $this->testUser->id)
+            ->where('tanggal', '>=', $startDate)
+            ->get();
+        $totalPeriode   = $jadwalPeriode->count();
+        $selesaiPeriode = $jadwalPeriode->where('status', 'selesai')->count();
+        $pendingPeriode = $jadwalPeriode->where('status', 'mendatang')->count();
+        $selesaiPersen  = $totalPeriode > 0 ? round($selesaiPeriode / $totalPeriode * 100, 1) : 0;
+        $pendingPersen  = $totalPeriode > 0 ? round($pendingPeriode / $totalPeriode * 100, 1) : 0;
+
+        // Langkah 3
+        $this->assertEquals(5, $totalPeriode);
+        $this->assertEquals(3, $selesaiPeriode);
+        $this->assertEquals(2, $pendingPeriode);
+
+        // Langkah 4
+        $this->assertEquals(60.0, $selesaiPersen);
+        $this->assertEquals(40.0, $pendingPersen);
+    }
+
+    /**
+     * @test TC-B08: recentJadwal — 5 jenis pemeriksaan unik paling awal
+     *
+     * Langkah:
+     * 1. Buat 7 jadwal: 3 jenis berbeda, salah satu duplikat
+     * 2. Query recentJadwal seperti controller (unique jenis, take 5, order tanggal asc)
+     * 3. Pastikan yang dikembalikan unik dan maksimal 5 item
+     */
+    public function test_tcb08_recent_jadwal_unik_dan_limit_5(): void
+    {
+        $today = Carbon::today();
+
+        // Langkah 1: Buat jadwal dengan berbagai jenis (ada duplikat)
+        $this->buatJadwal(['jenis_pemeriksaan' => 'Cek Darah',    'tanggal' => $today->copy()->subDays(10)->format('Y-m-d')]);
+        $this->buatJadwal(['jenis_pemeriksaan' => 'Cek Mata',     'tanggal' => $today->copy()->subDays(8)->format('Y-m-d')]);
+        $this->buatJadwal(['jenis_pemeriksaan' => 'Cek Jantung',  'tanggal' => $today->copy()->subDays(6)->format('Y-m-d')]);
+        $this->buatJadwal(['jenis_pemeriksaan' => 'Cek Darah',    'tanggal' => $today->copy()->subDays(4)->format('Y-m-d')]); // duplikat
+        $this->buatJadwal(['jenis_pemeriksaan' => 'Cek Gigi',     'tanggal' => $today->copy()->subDays(2)->format('Y-m-d')]);
+        $this->buatJadwal(['jenis_pemeriksaan' => 'Cek Paru',     'tanggal' => $today->copy()->subDays(1)->format('Y-m-d')]);
+        $this->buatJadwal(['jenis_pemeriksaan' => 'Cek Kulit',    'tanggal' => $today->copy()->format('Y-m-d')]);
+
+        // Langkah 2
+        $recentJadwal = Jadwal::where('user_id', $this->testUser->id)
+            ->orderBy('tanggal', 'asc')
+            ->get()
+            ->unique('jenis_pemeriksaan')
+            ->take(5)
+            ->values();
+
+        // Langkah 3
+        $this->assertLessThanOrEqual(5, $recentJadwal->count());
+        $jenisUnik = $recentJadwal->pluck('jenis_pemeriksaan')->unique();
+        $this->assertEquals($recentJadwal->count(), $jenisUnik->count()); // tidak ada duplikat
+    }
+
+    /**
+     * @test TC-B09: Data isolation — progress hanya menghitung jadwal milik user sendiri
+     *
+     * Langkah:
+     * 1. Buat user lain dengan 10 jadwal selesai bulan ini
+     * 2. Buat 2 jadwal selesai untuk testUser bulan ini
+     * 3. Query progress konsistensi khusus testUser
+     * 4. Pastikan totalBulanIni = 2 (bukan 12)
+     */
+    public function test_tcb09_data_isolation_progress(): void
+    {
+        $today = Carbon::today();
+
+        // Langkah 1
+        $uid      = Str::random(6);
+        $userLain = User::create([
+            'full_name'     => 'User Lain PKE14',
+            'email'         => "lain.pke14.{$uid}@test.local",
+            'password_hash' => Hash::make('Password123!'),
+            'role'          => 'user',
+        ]);
+        for ($i = 0; $i < 10; $i++) {
+            Jadwal::create([
+                'user_id'           => $userLain->id,
+                'jenis_pemeriksaan' => "Jadwal Orang Lain {$i}",
+                'tanggal'           => $today->copy()->addDays($i)->format('Y-m-d'),
+                'waktu'             => '09:00',
+                'fasilitas_klinik'  => 'RS X',
+                'status'            => 'selesai',
+            ]);
+        }
+
+        // Langkah 2
+        $this->buatJadwal(['status' => 'selesai', 'tanggal' => $today->copy()->format('Y-m-d')]);
+        $this->buatJadwal(['status' => 'selesai', 'tanggal' => $today->copy()->addDays(1)->format('Y-m-d')]);
+
+        // Langkah 3
+        $bulanIniSaya = Jadwal::where('user_id', $this->testUser->id)
+            ->whereYear('tanggal', $today->year)
+            ->whereMonth('tanggal', $today->month)
+            ->get();
+
+        // Langkah 4
+        $this->assertEquals(2, $bulanIniSaya->count());
+
+        Jadwal::where('user_id', $userLain->id)->delete();
+        $userLain->delete();
+    }
+
+    /**
+     * @test TC-B10: Insight "jadwal terlewat" — jadwal mendatang dengan tanggal lampau terdeteksi
+     *
+     * Langkah:
+     * 1. Buat jadwal status mendatang dengan tanggal kemarin (terlewat)
+     * 2. Query jadwal terlewat seperti computeSmartInsights()
+     * 3. Pastikan jadwal tersebut terdeteksi sebagai terlewat
+     */
+    public function test_tcb10_insight_jadwal_terlewat(): void
+    {
+        $today = Carbon::today();
+
+        // Langkah 1
+        $this->buatJadwal([
+            'status'            => 'mendatang',
+            'tanggal'           => $today->copy()->subDays(3)->format('Y-m-d'),
+            'jenis_pemeriksaan' => 'Cek Terlewat B10',
+        ]);
+
+        // Langkah 2
+        $missed = Jadwal::where('user_id', $this->testUser->id)
+            ->where('status', 'mendatang')
+            ->where('tanggal', '<', $today)
+            ->selectRaw('jenis_pemeriksaan, COUNT(*) as cnt')
+            ->groupBy('jenis_pemeriksaan')
+            ->get();
+
+        // Langkah 3
+        $this->assertGreaterThan(0, $missed->count());
+        $this->assertEquals('Cek Terlewat B10', $missed->first()->jenis_pemeriksaan);
+    }
+
+    /**
+     * @test TC-B11: Insight "jadwal mendatang 7 hari" — jadwal dalam 7 hari terdeteksi
+     *
+     * Langkah:
+     * 1. Buat 2 jadwal mendatang dalam 7 hari ke depan
+     * 2. Buat 1 jadwal mendatang > 7 hari (tidak terhitung)
+     * 3. Query upcoming seperti computeSmartInsights()
+     * 4. Pastikan count = 2
+     */
+    public function test_tcb11_insight_jadwal_mendatang_7_hari(): void
+    {
+        $today = Carbon::today();
+
+        // Langkah 1–2
+        $this->buatJadwal(['status' => 'mendatang', 'tanggal' => $today->copy()->addDays(2)->format('Y-m-d')]);
+        $this->buatJadwal(['status' => 'mendatang', 'tanggal' => $today->copy()->addDays(5)->format('Y-m-d')]);
+        $this->buatJadwal(['status' => 'mendatang', 'tanggal' => $today->copy()->addDays(10)->format('Y-m-d')]);
+
+        // Langkah 3
+        $upcoming = Jadwal::where('user_id', $this->testUser->id)
+            ->where('status', 'mendatang')
+            ->whereBetween('tanggal', [$today, $today->copy()->addDays(7)])
+            ->count();
+
+        // Langkah 4
+        $this->assertEquals(2, $upcoming);
+    }
 }

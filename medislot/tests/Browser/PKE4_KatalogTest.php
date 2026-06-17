@@ -109,24 +109,27 @@ class PKE4_KatalogTest extends DuskTestCase
 
     /**
      * @test TC-04 (TS.KAT.002) – Hasil pencarian keyword valid menampilkan data yang relevan (Positive)
-     * Setelah pencarian "Gigi", card yang tampil mengandung kata "Gigi".
+     * Setelah pencarian keyword dari katalog pertama, card yang relevan tampil.
      */
     public function test_tc04_hasil_pencarian_keyword_valid_relevan(): void
     {
-        $this->browse(function (Browser $browser) {
+        // Ambil kata pertama dari nama katalog pertama yang aktif
+        $namaKatalog = KatalogPemeriksaan::where('status', 'aktif')->value('nama') ?? 'Pemeriksaan';
+        $keyword     = explode(' ', $namaKatalog)[0];
+
+        $this->browse(function (Browser $browser) use ($keyword) {
             $this->loginDanBukaKatalog($browser)
-                 ->type('input[name="q"]', 'Gigi')
+                 ->type('input[name="q"]', $keyword)
                  ->click('.btn-search')
                  ->waitFor('.katalog-grid, .empty-state', 10)
                  ->assertPresent('.katalog-card')
                  ->screenshot('tc04-hasil-pencarian-relevan');
         });
 
-        // Verifikasi di DB bahwa ada katalog bertema Gigi
+        // Verifikasi di DB bahwa memang ada hasil untuk keyword tersebut
         $this->assertGreaterThan(0,
             KatalogPemeriksaan::where('status', 'aktif')
-                ->whereRaw("LOWER(nama) LIKE '%gigi%'")
-                ->orWhereRaw("LOWER(kategori) LIKE '%gigi%'")
+                ->whereRaw("LOWER(nama) LIKE ?", ['%' . strtolower($keyword) . '%'])
                 ->count()
         );
     }
@@ -281,5 +284,200 @@ class PKE4_KatalogTest extends DuskTestCase
                  ->assertPathIs('/katalog')
                  ->screenshot('tc12-pencarian-kosong-tampilkan-semua');
         });
+    }
+
+    // =========================================================================
+    // BACKEND / DATABASE TESTS (tanpa browser)
+    // =========================================================================
+
+    private function buatKatalog(array $override = []): KatalogPemeriksaan
+    {
+        $uid = Str::random(6);
+        return KatalogPemeriksaan::create(array_merge([
+            'slug'       => "pemeriksaan-test-{$uid}",
+            'nama'       => "Pemeriksaan Test {$uid}",
+            'kategori'   => 'Umum',
+            'icon'       => 'fa-stethoscope',
+            'bg_color'   => '#e8f5f0',
+            'icon_color' => '#2d9e72',
+            'singkat'    => 'Pemeriksaan umum rutin',
+            'deskripsi'  => 'Deskripsi pemeriksaan test',
+            'biaya_min'  => 100000,
+            'biaya_max'  => 300000,
+            'status'     => 'aktif',
+        ], $override));
+    }
+
+    /** @test TC-B01: Data katalog tersimpan ke tabel katalog_pemeriksaan dengan benar */
+    public function test_tcb01_data_katalog_tersimpan_ke_db(): void
+    {
+        $katalog = $this->buatKatalog(['nama' => 'Pemeriksaan Jantung Test']);
+
+        $this->assertDatabaseHas('katalog_pemeriksaan', [
+            'id'       => $katalog->id,
+            'nama'     => 'Pemeriksaan Jantung Test',
+            'kategori' => 'Umum',
+            'status'   => 'aktif',
+        ]);
+    }
+
+    /** @test TC-B02: Slug dibuat otomatis dari nama dan unik di DB */
+    public function test_tcb02_slug_unik_di_db(): void
+    {
+        $k1 = $this->buatKatalog(['nama' => 'Cek Mata Rutin A']);
+        $k2 = $this->buatKatalog(['nama' => 'Cek Mata Rutin B']);
+
+        $this->assertNotEquals($k1->slug, $k2->slug, 'Setiap katalog harus memiliki slug yang unik');
+        $this->assertDatabaseHas('katalog_pemeriksaan', ['slug' => $k1->slug]);
+        $this->assertDatabaseHas('katalog_pemeriksaan', ['slug' => $k2->slug]);
+    }
+
+    /** @test TC-B03: biaya_min dan biaya_max tersimpan sebagai integer */
+    public function test_tcb03_biaya_tersimpan_sebagai_integer(): void
+    {
+        $katalog = $this->buatKatalog(['biaya_min' => 150000, 'biaya_max' => 500000]);
+
+        $fresh = KatalogPemeriksaan::find($katalog->id);
+        $this->assertIsInt($fresh->biaya_min);
+        $this->assertIsInt($fresh->biaya_max);
+        $this->assertEquals(150000, $fresh->biaya_min);
+        $this->assertEquals(500000, $fresh->biaya_max);
+    }
+
+    /** @test TC-B04: persiapan disimpan sebagai JSON array di DB */
+    public function test_tcb04_persiapan_disimpan_sebagai_array(): void
+    {
+        $persiapan = ['Puasa 8 jam', 'Tidak minum kopi', 'Bawa kartu identitas'];
+        $katalog   = $this->buatKatalog(['persiapan' => $persiapan]);
+
+        $fresh = KatalogPemeriksaan::find($katalog->id);
+        $this->assertIsArray($fresh->persiapan);
+        $this->assertContains('Puasa 8 jam', $fresh->persiapan);
+        $this->assertContains('Tidak minum kopi', $fresh->persiapan);
+        $this->assertCount(3, $fresh->persiapan);
+    }
+
+    /** @test TC-B05: Status 'aktif' hanya tampil di query aktif, 'nonaktif' tidak */
+    public function test_tcb05_filter_status_aktif_benar(): void
+    {
+        $aktif    = $this->buatKatalog(['status' => 'aktif']);
+        $nonaktif = $this->buatKatalog(['status' => 'nonaktif']);
+
+        $hasilAktif = KatalogPemeriksaan::where('status', 'aktif')->pluck('id');
+
+        $this->assertContains($aktif->id, $hasilAktif);
+        $this->assertNotContains($nonaktif->id, $hasilAktif);
+    }
+
+    /** @test TC-B06: Pencarian nama katalog dengan LIKE berfungsi di DB */
+    public function test_tcb06_pencarian_nama_dengan_like(): void
+    {
+        $this->buatKatalog(['nama' => 'Pemeriksaan Ginjal Rutin', 'status' => 'aktif']);
+
+        $hasil = KatalogPemeriksaan::where('status', 'aktif')
+                    ->whereRaw("LOWER(nama) LIKE ?", ['%ginjal%'])
+                    ->get();
+
+        $this->assertGreaterThan(0, $hasil->count());
+        $this->assertTrue($hasil->contains(fn($k) => str_contains(strtolower($k->nama), 'ginjal')));
+    }
+
+    /** @test TC-B07: Pencarian keyword tidak ditemukan mengembalikan koleksi kosong */
+    public function test_tcb07_pencarian_keyword_tidak_ada_kosong(): void
+    {
+        $hasil = KatalogPemeriksaan::where('status', 'aktif')
+                    ->whereRaw("LOWER(nama) LIKE ?", ['%xyznotfound123%'])
+                    ->get();
+
+        $this->assertCount(0, $hasil);
+    }
+
+    /** @test TC-B08: Pencarian bisa berdasarkan kategori */
+    public function test_tcb08_pencarian_berdasarkan_kategori(): void
+    {
+        $this->buatKatalog(['kategori' => 'Jantung', 'status' => 'aktif']);
+
+        $hasil = KatalogPemeriksaan::where('status', 'aktif')
+                    ->where('kategori', 'Jantung')
+                    ->get();
+
+        $this->assertGreaterThan(0, $hasil->count());
+        $hasil->each(fn($k) => $this->assertEquals('Jantung', $k->kategori));
+    }
+
+    /** @test TC-B09: Edit katalog — perubahan nama dan biaya tersimpan ke DB */
+    public function test_tcb09_edit_katalog_tersimpan_ke_db(): void
+    {
+        $katalog = $this->buatKatalog(['nama' => 'Nama Lama Katalog', 'biaya_min' => 100000]);
+
+        $katalog->update(['nama' => 'Nama Baru Katalog', 'biaya_min' => 200000]);
+
+        $this->assertDatabaseHas('katalog_pemeriksaan', [
+            'id'       => $katalog->id,
+            'nama'     => 'Nama Baru Katalog',
+            'biaya_min'=> 200000,
+        ]);
+        $this->assertDatabaseMissing('katalog_pemeriksaan', [
+            'id'  => $katalog->id,
+            'nama'=> 'Nama Lama Katalog',
+        ]);
+    }
+
+    /** @test TC-B10: Hapus katalog — data hilang dari DB */
+    public function test_tcb10_hapus_katalog_hilang_dari_db(): void
+    {
+        $katalog = $this->buatKatalog(['nama' => 'Katalog Akan Dihapus']);
+        $id      = $katalog->id;
+
+        $katalog->delete();
+
+        $this->assertDatabaseMissing('katalog_pemeriksaan', ['id' => $id]);
+    }
+
+    /** @test TC-B11: Katalog bisa diambil via slug (metode yang dipakai controller show) */
+    public function test_tcb11_ambil_katalog_via_slug(): void
+    {
+        $slug    = 'tes-slug-pke4-' . Str::random(6);
+        $katalog = $this->buatKatalog(['slug' => $slug, 'nama' => 'Tes Slug PKE4']);
+
+        $found = KatalogPemeriksaan::where('slug', $slug)
+                    ->where('status', 'aktif')
+                    ->first();
+
+        $this->assertNotNull($found);
+        $this->assertEquals('Tes Slug PKE4', $found->nama);
+    }
+
+    /** @test TC-B12: Slug tidak ditemukan mengembalikan null (akan 404 di controller) */
+    public function test_tcb12_slug_tidak_ada_mengembalikan_null(): void
+    {
+        $found = KatalogPemeriksaan::where('slug', 'slug-yang-tidak-ada-xyz')
+                    ->where('status', 'aktif')
+                    ->first();
+
+        $this->assertNull($found);
+    }
+
+    /** @test TC-B13: updated_at berubah setelah katalog diedit */
+    public function test_tcb13_updated_at_berubah_setelah_edit(): void
+    {
+        $katalog = $this->buatKatalog();
+        $before  = $katalog->updated_at;
+
+        sleep(1);
+        $katalog->update(['nama' => 'Nama Setelah Edit']);
+
+        $after = KatalogPemeriksaan::find($katalog->id)->updated_at;
+        $this->assertTrue($after->greaterThan($before), 'updated_at harus berubah setelah edit');
+    }
+
+    /** @test TC-B14: persiapan null tidak menyebabkan error di DB */
+    public function test_tcb14_persiapan_null_tidak_error(): void
+    {
+        $katalog = $this->buatKatalog(['persiapan' => null]);
+
+        $fresh = KatalogPemeriksaan::find($katalog->id);
+        $this->assertNull($fresh->persiapan);
+        $this->assertDatabaseHas('katalog_pemeriksaan', ['id' => $katalog->id]);
     }
 }

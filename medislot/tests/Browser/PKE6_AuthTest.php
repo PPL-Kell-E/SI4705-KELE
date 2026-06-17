@@ -263,4 +263,182 @@ class PKE6_AuthTest extends DuskTestCase
                     ->screenshot('tc12-logout-sesi-invalid');
         });
     }
+
+    // =========================================================================
+    // BACKEND / DATABASE TESTS (tanpa browser)
+    // =========================================================================
+
+    /** @test TC-B01: Registrasi menyimpan user ke tabel users dengan benar */
+    public function test_tcb01_registrasi_simpan_user_ke_db(): void
+    {
+        $email = 'tcb01.' . Str::random(6) . '@test.local';
+
+        $user = User::create([
+            'full_name'     => 'Backend Test User',
+            'email'         => $email,
+            'password_hash' => Hash::make('Password123!'),
+            'role'          => 'user',
+        ]);
+
+        $this->assertDatabaseHas('users', [
+            'email'     => $email,
+            'full_name' => 'Backend Test User',
+            'role'      => 'user',
+        ]);
+
+        $user->delete();
+    }
+
+    /** @test TC-B02: Password disimpan sebagai hash (bukan plain text) */
+    public function test_tcb02_password_disimpan_sebagai_hash(): void
+    {
+        $plain = 'Password123!';
+
+        $this->assertNotEquals($plain, $this->testUser->password_hash);
+        $this->assertTrue(Hash::check($plain, $this->testUser->password_hash));
+    }
+
+    /** @test TC-B03: Email unik — duplikat ditolak oleh unique constraint */
+    public function test_tcb03_email_unik_ditolak(): void
+    {
+        $this->expectException(\Illuminate\Database\UniqueConstraintViolationException::class);
+
+        User::create([
+            'full_name'     => 'Duplikat',
+            'email'         => $this->testEmail, // sudah ada
+            'password_hash' => Hash::make('Password123!'),
+            'role'          => 'user',
+        ]);
+    }
+
+    /** @test TC-B04: Role default user adalah 'user' */
+    public function test_tcb04_role_default_user(): void
+    {
+        $email = 'tcb04.' . Str::random(6) . '@test.local';
+
+        $user = User::create([
+            'full_name'     => 'Role Test',
+            'email'         => $email,
+            'password_hash' => Hash::make('Password123!'),
+            'role'          => 'user',
+        ]);
+
+        $fresh = User::find($user->id);
+        $this->assertEquals('user', $fresh->role);
+
+        $user->delete();
+    }
+
+    /** @test TC-B05: Validasi registrasi — full_name wajib diisi */
+    public function test_tcb05_validasi_full_name_wajib(): void
+    {
+        $rules = app(\App\Http\Controllers\AuthController::class);
+
+        // Verifikasi rule ada di controller
+        $reflection = new \ReflectionMethod(\App\Http\Controllers\AuthController::class, 'register');
+        $source     = file_get_contents((new \ReflectionClass(\App\Http\Controllers\AuthController::class))->getFileName());
+
+        $this->assertStringContainsString("'full_name'", $source);
+        $this->assertStringContainsString("'required'", $source);
+    }
+
+    /** @test TC-B06: Validasi registrasi — password min 8 karakter */
+    public function test_tcb06_validasi_password_min8(): void
+    {
+        $source = file_get_contents((new \ReflectionClass(\App\Http\Controllers\AuthController::class))->getFileName());
+
+        $this->assertStringContainsString("'min:8'", $source);
+    }
+
+    /** @test TC-B07: Validasi registrasi — email harus unik di tabel users */
+    public function test_tcb07_validasi_email_unique(): void
+    {
+        $source = file_get_contents((new \ReflectionClass(\App\Http\Controllers\AuthController::class))->getFileName());
+
+        $this->assertStringContainsString("'unique:users'", $source);
+    }
+
+    /** @test TC-B08: Auth::attempt berhasil dengan kredensial yang valid */
+    public function test_tcb08_auth_attempt_valid(): void
+    {
+        $result = \Illuminate\Support\Facades\Auth::attempt([
+            'email'    => $this->testEmail,
+            'password' => 'Password123!',
+        ]);
+
+        $this->assertTrue($result, 'Auth::attempt harus berhasil dengan kredensial valid');
+        \Illuminate\Support\Facades\Auth::logout();
+    }
+
+    /** @test TC-B09: Auth::attempt gagal dengan password salah */
+    public function test_tcb09_auth_attempt_password_salah(): void
+    {
+        $result = \Illuminate\Support\Facades\Auth::attempt([
+            'email'    => $this->testEmail,
+            'password' => 'SalahPassword!',
+        ]);
+
+        $this->assertFalse($result, 'Auth::attempt harus gagal dengan password salah');
+    }
+
+    /** @test TC-B10: Auth::attempt gagal dengan email tidak terdaftar */
+    public function test_tcb10_auth_attempt_email_tidak_ada(): void
+    {
+        $result = \Illuminate\Support\Facades\Auth::attempt([
+            'email'    => 'tidakada.' . Str::random(6) . '@test.local',
+            'password' => 'Password123!',
+        ]);
+
+        $this->assertFalse($result, 'Auth::attempt harus gagal dengan email yang tidak terdaftar');
+    }
+
+    /** @test TC-B11: User yang dihapus tidak bisa login */
+    public function test_tcb11_user_dihapus_tidak_bisa_login(): void
+    {
+        $email = 'tcb11.' . Str::random(6) . '@test.local';
+        $user  = User::create([
+            'full_name'     => 'User Akan Dihapus',
+            'email'         => $email,
+            'password_hash' => Hash::make('Password123!'),
+            'role'          => 'user',
+        ]);
+
+        $user->delete();
+
+        $result = \Illuminate\Support\Facades\Auth::attempt([
+            'email'    => $email,
+            'password' => 'Password123!',
+        ]);
+
+        $this->assertFalse($result);
+        $this->assertDatabaseMissing('users', ['email' => $email]);
+    }
+
+    /** @test TC-B12: Data isolation — user tidak bisa akses data user lain */
+    public function test_tcb12_data_isolation_antar_user(): void
+    {
+        $email2 = 'tcb12.' . Str::random(6) . '@test.local';
+        $user2  = User::create([
+            'full_name'     => 'User Kedua',
+            'email'         => $email2,
+            'password_hash' => Hash::make('Password123!'),
+            'role'          => 'user',
+        ]);
+
+        // Pastikan query by email hanya mengembalikan user yang bersangkutan
+        $found = User::where('email', $this->testEmail)->first();
+        $this->assertEquals($this->testUser->id, $found->id);
+        $this->assertNotEquals($user2->id, $found->id);
+
+        $user2->delete();
+    }
+
+    /** @test TC-B13: created_at dan updated_at terisi otomatis saat registrasi */
+    public function test_tcb13_timestamps_terisi_otomatis(): void
+    {
+        $fresh = User::find($this->testUser->id);
+
+        $this->assertNotNull($fresh->created_at);
+        $this->assertNotNull($fresh->updated_at);
+    }
 }

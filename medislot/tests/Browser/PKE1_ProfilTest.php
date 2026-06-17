@@ -290,4 +290,241 @@ class PKE1_ProfilTest extends DuskTestCase
                     ->screenshot('tc18-data-terupdate-setelah-refresh');
         });
     }
+
+    // =========================================================================
+    // BACKEND / DATABASE TESTS (tanpa browser)
+    // =========================================================================
+
+    /** @test TC-B01: Profil dibuat otomatis (firstOrCreate) jika belum ada di DB */
+    public function test_tcb01_profil_dibuat_otomatis_jika_belum_ada(): void
+    {
+        // Pastikan profil belum ada
+        Profile::destroy($this->testUser->id);
+        $this->assertDatabaseMissing('profiles', ['id' => $this->testUser->id]);
+
+        // firstOrCreate dipanggil saat GET /profile (simulasikan via model langsung)
+        Profile::firstOrCreate(
+            ['id' => $this->testUser->id],
+            ['name' => $this->testUser->full_name ?? 'Test', 'age' => 1, 'gender' => 'Lainnya']
+        );
+
+        $this->assertDatabaseHas('profiles', ['id' => $this->testUser->id]);
+    }
+
+    /** @test TC-B02: Data profil (name, age, gender) tersimpan ke tabel profiles dengan benar */
+    public function test_tcb02_data_profil_tersimpan_ke_tabel_profiles(): void
+    {
+        $this->testProfile->update([
+            'name'   => 'Citra Dewi',
+            'age'    => 32,
+            'gender' => 'Perempuan',
+        ]);
+
+        $this->assertDatabaseHas('profiles', [
+            'id'     => $this->testUser->id,
+            'name'   => 'Citra Dewi',
+            'age'    => 32,
+            'gender' => 'Perempuan',
+        ]);
+    }
+
+    /** @test TC-B03: Field opsional (phone, address) tersimpan jika diisi */
+    public function test_tcb03_field_opsional_tersimpan_jika_diisi(): void
+    {
+        $this->testProfile->update([
+            'phone'   => '087700000000',
+            'address' => 'Jl. Merdeka No. 10, Bandung',
+        ]);
+
+        $this->assertDatabaseHas('profiles', [
+            'id'      => $this->testUser->id,
+            'phone'   => '087700000000',
+            'address' => 'Jl. Merdeka No. 10, Bandung',
+        ]);
+    }
+
+    /** @test TC-B04: Data health (blood_type, height, weight) tersimpan ke tabel health_data */
+    public function test_tcb04_data_kesehatan_tersimpan_ke_health_data(): void
+    {
+        HealthData::updateOrCreate(
+            ['user_id' => $this->testUser->id],
+            [
+                'blood_type'  => 'A+',
+                'height_cm'   => 170,
+                'weight_kg'   => 65,
+                'recorded_at' => now(),
+            ]
+        );
+
+        $this->assertDatabaseHas('health_data', [
+            'user_id'    => $this->testUser->id,
+            'blood_type' => 'A+',
+        ]);
+
+        $record = HealthData::where('user_id', $this->testUser->id)->first();
+        $this->assertEquals(170, (float) $record->height_cm);
+        $this->assertEquals(65,  (float) $record->weight_kg);
+    }
+
+    /** @test TC-B05: Alergi disimpan sebagai JSON array, bukan string mentah */
+    public function test_tcb05_allergies_disimpan_sebagai_array(): void
+    {
+        $allergies = array_map('trim', explode(',', 'Debu, Serbuk Bunga'));
+
+        HealthData::updateOrCreate(
+            ['user_id' => $this->testUser->id],
+            ['allergies' => $allergies, 'recorded_at' => now()]
+        );
+
+        $record = HealthData::where('user_id', $this->testUser->id)->first();
+        $this->assertIsArray($record->allergies);
+        $this->assertContains('Debu', $record->allergies);
+        $this->assertContains('Serbuk Bunga', $record->allergies);
+    }
+
+    /** @test TC-B06: Kondisi kronis disimpan sebagai JSON array */
+    public function test_tcb06_chronic_conditions_disimpan_sebagai_array(): void
+    {
+        $conditions = array_map('trim', explode(',', 'Diabetes, Hipertensi'));
+
+        HealthData::updateOrCreate(
+            ['user_id' => $this->testUser->id],
+            ['chronic_conditions' => $conditions, 'recorded_at' => now()]
+        );
+
+        $record = HealthData::where('user_id', $this->testUser->id)->first();
+        $this->assertIsArray($record->chronic_conditions);
+        $this->assertContains('Diabetes', $record->chronic_conditions);
+        $this->assertContains('Hipertensi', $record->chronic_conditions);
+    }
+
+    /** @test TC-B07: updateOrCreate tidak membuat duplikat health_data */
+    public function test_tcb07_health_data_diupdate_bukan_duplikat(): void
+    {
+        HealthData::updateOrCreate(
+            ['user_id' => $this->testUser->id],
+            ['blood_type' => 'B', 'recorded_at' => now()]
+        );
+        HealthData::updateOrCreate(
+            ['user_id' => $this->testUser->id],
+            ['blood_type' => 'O+', 'recorded_at' => now()]
+        );
+
+        $count = HealthData::where('user_id', $this->testUser->id)->count();
+        $this->assertEquals(1, $count, 'Harus hanya ada 1 record health_data per user');
+
+        $this->assertDatabaseHas('health_data', [
+            'user_id'    => $this->testUser->id,
+            'blood_type' => 'O+',
+        ]);
+    }
+
+    /** @test TC-B08: UUID profil sesuai dengan user_id */
+    public function test_tcb08_uuid_profil_sesuai_user_id(): void
+    {
+        $this->assertEquals($this->testUser->id, $this->testProfile->id);
+        $this->assertMatchesRegularExpression(
+            '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i',
+            $this->testProfile->id
+        );
+    }
+
+    /** @test TC-B09: Kolom age tersimpan sebagai integer bukan string */
+    public function test_tcb09_kolom_age_tersimpan_sebagai_integer(): void
+    {
+        $this->testProfile->update(['age' => 27]);
+
+        $fresh = Profile::find($this->testUser->id);
+        $this->assertIsInt($fresh->age);
+        $this->assertEquals(27, $fresh->age);
+    }
+
+    /** @test TC-B10: Model Profile memiliki relasi hasMany ke HealthData */
+    public function test_tcb10_relasi_profile_ke_health_data(): void
+    {
+        HealthData::updateOrCreate(
+            ['user_id' => $this->testUser->id],
+            ['blood_type' => 'AB', 'recorded_at' => now()]
+        );
+
+        $latest = $this->testProfile->latestHealthData;
+        $this->assertNotNull($latest);
+        $this->assertEquals('AB', $latest->blood_type);
+    }
+
+    /** @test TC-B11: updated_at profil berubah setelah data diperbarui */
+    public function test_tcb11_updated_at_berubah_setelah_update(): void
+    {
+        $before = Profile::find($this->testUser->id)->updated_at;
+
+        sleep(1);
+        $this->testProfile->update(['name' => 'Nama Berubah']);
+
+        $after = Profile::find($this->testUser->id)->updated_at;
+        $this->assertTrue(
+            $after->greaterThan($before),
+            'updated_at seharusnya lebih baru setelah profil diperbarui'
+        );
+    }
+
+    /** @test TC-B12: Update profil tidak mengubah data user lain */
+    public function test_tcb12_update_tidak_mengubah_profil_user_lain(): void
+    {
+        $uniqueId = Str::random(8);
+        $other    = User::create([
+            'full_name'     => 'User Lain PKE1',
+            'email'         => "other.pke1.{$uniqueId}@test.local",
+            'password_hash' => \Illuminate\Support\Facades\Hash::make('Password123!'),
+            'role'          => 'user',
+        ]);
+        $otherProfile = Profile::create([
+            'id'     => $other->id,
+            'name'   => 'Nama User Lain',
+            'age'    => 40,
+            'gender' => 'Laki-laki',
+        ]);
+
+        // Update hanya profil testUser
+        $this->testProfile->update(['name' => 'Profil Saya Diubah']);
+
+        // Profil user lain tidak berubah
+        $this->assertDatabaseHas('profiles', [
+            'id'   => $other->id,
+            'name' => 'Nama User Lain',
+        ]);
+
+        // Cleanup
+        $otherProfile->delete();
+        $other->delete();
+    }
+
+    /** @test TC-B13: Profil dengan field opsional null tidak menyebabkan error di DB */
+    public function test_tcb13_field_null_tidak_menyebabkan_error(): void
+    {
+        $this->testProfile->update([
+            'phone'      => null,
+            'address'    => null,
+            'birth_date' => null,
+            'avatar_url' => null,
+        ]);
+
+        $fresh = Profile::find($this->testUser->id);
+        $this->assertNull($fresh->phone);
+        $this->assertNull($fresh->address);
+        $this->assertNull($fresh->birth_date);
+        $this->assertDatabaseHas('profiles', ['id' => $this->testUser->id]);
+    }
+
+    /** @test TC-B14: HealthData dengan allergies kosong tersimpan sebagai array kosong */
+    public function test_tcb14_allergies_kosong_tersimpan_sebagai_array_kosong(): void
+    {
+        HealthData::updateOrCreate(
+            ['user_id' => $this->testUser->id],
+            ['allergies' => [], 'recorded_at' => now()]
+        );
+
+        $record = HealthData::where('user_id', $this->testUser->id)->first();
+        $this->assertIsArray($record->allergies);
+        $this->assertEmpty($record->allergies);
+    }
 }

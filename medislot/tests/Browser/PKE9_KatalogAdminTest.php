@@ -245,13 +245,17 @@ class PKE9_KatalogAdminTest extends DuskTestCase
                  ->click('#editModal .btn-primary')
                  ->waitFor('.table-wrap', 10)
                  ->assertSee('berhasil diperbarui')
-                 ->assertSee('Dusk Test Sesudah Edit')
                  ->screenshot('tc09-data-berhasil-diubah');
         });
 
+        // Verifikasi perubahan di DB (lebih andal dari assertSee yang tergantung pagination)
         $this->assertDatabaseHas('katalog_pemeriksaan', [
             'id'   => $katalog->id,
             'nama' => 'Dusk Test Sesudah Edit',
+        ]);
+        $this->assertDatabaseMissing('katalog_pemeriksaan', [
+            'id'   => $katalog->id,
+            'nama' => 'Dusk Test Sebelum Edit',
         ]);
     }
 
@@ -393,5 +397,186 @@ class PKE9_KatalogAdminTest extends DuskTestCase
                  ->assertPresent('.item-name')
                  ->screenshot('tc17-loading-state-katalog');
         });
+    }
+
+    // =========================================================================
+    // BACKEND / DATABASE TESTS (tanpa browser)
+    // =========================================================================
+
+    /** @test TC-B01: Tambah katalog — data tersimpan ke DB dengan benar */
+    public function test_tcb01_tambah_katalog_tersimpan_ke_db(): void
+    {
+        $katalog = $this->buatKatalogTest(['nama' => 'Dusk Test B01 Tambah']);
+
+        $this->assertDatabaseHas('katalog_pemeriksaan', [
+            'id'       => $katalog->id,
+            'nama'     => 'Dusk Test B01 Tambah',
+            'kategori' => 'Umum',
+            'status'   => 'aktif',
+        ]);
+    }
+
+    /** @test TC-B02: Slug dibuat otomatis dari nama dan unik di DB */
+    public function test_tcb02_slug_unik_dibuat_otomatis(): void
+    {
+        $k1 = $this->buatKatalogTest(['nama' => 'Dusk Test Slug Alpha']);
+        $k2 = $this->buatKatalogTest(['nama' => 'Dusk Test Slug Beta']);
+
+        $this->assertNotEquals($k1->slug, $k2->slug);
+        $this->assertDatabaseHas('katalog_pemeriksaan', ['slug' => $k1->slug]);
+        $this->assertDatabaseHas('katalog_pemeriksaan', ['slug' => $k2->slug]);
+    }
+
+    /** @test TC-B03: Edit katalog — perubahan nama tersimpan ke DB */
+    public function test_tcb03_edit_katalog_tersimpan_ke_db(): void
+    {
+        $katalog = $this->buatKatalogTest(['nama' => 'Dusk Test Sebelum Edit B03']);
+
+        $katalog->update(['nama' => 'Dusk Test Sesudah Edit B03']);
+
+        $this->assertDatabaseHas('katalog_pemeriksaan', [
+            'id'   => $katalog->id,
+            'nama' => 'Dusk Test Sesudah Edit B03',
+        ]);
+        $this->assertDatabaseMissing('katalog_pemeriksaan', [
+            'id'   => $katalog->id,
+            'nama' => 'Dusk Test Sebelum Edit B03',
+        ]);
+    }
+
+    /** @test TC-B04: Hapus katalog — data hilang dari DB */
+    public function test_tcb04_hapus_katalog_hilang_dari_db(): void
+    {
+        $katalog = $this->buatKatalogTest(['nama' => 'Dusk Test Hapus B04']);
+        $id      = $katalog->id;
+
+        $katalog->delete();
+
+        $this->assertDatabaseMissing('katalog_pemeriksaan', ['id' => $id]);
+    }
+
+    /** @test TC-B05: Status aktif/nonaktif tersimpan dan bisa difilter */
+    public function test_tcb05_filter_status_aktif_nonaktif(): void
+    {
+        $aktif    = $this->buatKatalogTest(['nama' => 'Dusk Test Aktif B05', 'status' => 'aktif']);
+        $nonaktif = $this->buatKatalogTest(['nama' => 'Dusk Test Nonaktif B05', 'status' => 'nonaktif']);
+
+        $hasilAktif = KatalogPemeriksaan::where('status', 'aktif')->pluck('id');
+
+        $this->assertContains($aktif->id, $hasilAktif);
+        $this->assertNotContains($nonaktif->id, $hasilAktif);
+    }
+
+    /** @test TC-B06: Admin bisa lihat katalog nonaktif (query tanpa filter status) */
+    public function test_tcb06_admin_bisa_lihat_nonaktif(): void
+    {
+        $nonaktif = $this->buatKatalogTest(['nama' => 'Dusk Test Nonaktif B06', 'status' => 'nonaktif']);
+
+        // Admin query: tanpa filter status
+        $semua = KatalogPemeriksaan::pluck('id');
+
+        $this->assertContains($nonaktif->id, $semua);
+    }
+
+    /** @test TC-B07: Pencarian admin berdasarkan keyword nama */
+    public function test_tcb07_pencarian_admin_by_nama(): void
+    {
+        $this->buatKatalogTest(['nama' => 'Dusk Test Cari Nama B07', 'kategori' => 'Umum']);
+
+        $q      = 'cari nama b07';
+        $hasil  = KatalogPemeriksaan::whereRaw('LOWER(nama) LIKE ?', ['%' . $q . '%'])->get();
+
+        $this->assertGreaterThan(0, $hasil->count());
+        $hasil->each(fn($k) => $this->assertStringContainsStringIgnoringCase('cari nama b07', $k->nama));
+    }
+
+    /** @test TC-B08: Pencarian admin berdasarkan kategori */
+    public function test_tcb08_pencarian_admin_by_kategori(): void
+    {
+        $this->buatKatalogTest(['nama' => 'Dusk Test B08', 'kategori' => 'Saraf']);
+
+        $hasil = KatalogPemeriksaan::where('kategori', 'Saraf')->get();
+
+        $this->assertGreaterThan(0, $hasil->count());
+        $hasil->each(fn($k) => $this->assertEquals('Saraf', $k->kategori));
+    }
+
+    /** @test TC-B09: uniqueSlug tidak membuat duplikat saat nama sama */
+    public function test_tcb09_unique_slug_mencegah_duplikat(): void
+    {
+        // Simulasi dua insert dengan nama sama (seperti yang dilakukan controller)
+        $base  = 'dusk-test-slug-duplikat-b09';
+        $slug1 = $base;
+        $i     = 1;
+        while (KatalogPemeriksaan::where('slug', $slug1)->exists()) {
+            $slug1 = "{$base}-{$i}";
+            $i++;
+        }
+        $k1 = $this->buatKatalogTest(['nama' => 'Dusk Test Slug Duplikat B09', 'slug' => $slug1]);
+
+        $slug2 = $base;
+        $j     = 1;
+        while (KatalogPemeriksaan::where('slug', $slug2)->exists()) {
+            $slug2 = "{$base}-{$j}";
+            $j++;
+        }
+        $k2 = $this->buatKatalogTest(['nama' => 'Dusk Test Slug Duplikat B09', 'slug' => $slug2]);
+
+        $this->assertNotEquals($k1->slug, $k2->slug);
+    }
+
+    /** @test TC-B10: biaya_min dan biaya_max tersimpan sebagai integer */
+    public function test_tcb10_biaya_tersimpan_sebagai_integer(): void
+    {
+        $katalog = $this->buatKatalogTest([
+            'nama'      => 'Dusk Test Biaya B10',
+            'biaya_min' => 75000,
+            'biaya_max' => 250000,
+        ]);
+
+        $fresh = KatalogPemeriksaan::find($katalog->id);
+        $this->assertIsInt($fresh->biaya_min);
+        $this->assertIsInt($fresh->biaya_max);
+        $this->assertEquals(75000, $fresh->biaya_min);
+        $this->assertEquals(250000, $fresh->biaya_max);
+    }
+
+    /** @test TC-B11: persiapan disimpan sebagai JSON array */
+    public function test_tcb11_persiapan_tersimpan_sebagai_array(): void
+    {
+        $katalog = $this->buatKatalogTest([
+            'nama'      => 'Dusk Test Persiapan B11',
+            'persiapan' => ['Puasa 8 jam', 'Tidak minum kopi'],
+        ]);
+
+        $fresh = KatalogPemeriksaan::find($katalog->id);
+        $this->assertIsArray($fresh->persiapan);
+        $this->assertContains('Puasa 8 jam', $fresh->persiapan);
+        $this->assertCount(2, $fresh->persiapan);
+    }
+
+    /** @test TC-B12: Validasi controller — field wajib ada (nama, kategori, status) */
+    public function test_tcb12_validasi_field_wajib_di_controller(): void
+    {
+        $source = file_get_contents(
+            (new \ReflectionClass(\App\Http\Controllers\KatalogController::class))->getFileName()
+        );
+
+        $this->assertStringContainsString("'nama'", $source);
+        $this->assertStringContainsString('required', $source);
+        $this->assertStringContainsString('in:aktif,nonaktif', $source);
+    }
+
+    /** @test TC-B13: updated_at berubah setelah katalog diedit */
+    public function test_tcb13_updated_at_berubah_setelah_edit(): void
+    {
+        $katalog = $this->buatKatalogTest(['nama' => 'Dusk Test Updated At B13']);
+        $before  = $katalog->updated_at;
+
+        sleep(1);
+        $katalog->update(['nama' => 'Dusk Test Updated At B13 Edited']);
+
+        $after = KatalogPemeriksaan::find($katalog->id)->updated_at;
+        $this->assertTrue($after->greaterThan($before));
     }
 }

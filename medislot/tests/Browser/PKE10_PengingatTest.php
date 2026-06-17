@@ -414,4 +414,235 @@ class PKE10_PengingatTest extends DuskTestCase
                  ->screenshot('tc19-loading-selesai-data-tampil');
         });
     }
+
+    // =========================================================================
+    // BACKEND / DATABASE TESTS (tanpa browser)
+    // =========================================================================
+
+    /** @test TC-B01: Pengingat tersimpan ke tabel pengingat dengan benar */
+    public function test_tcb01_pengingat_tersimpan_ke_db(): void
+    {
+        $jadwal    = $this->buatJadwalMendatang();
+        $pengingat = $this->buatPengingat($jadwal);
+
+        $this->assertDatabaseHas('pengingat', [
+            'id'        => $pengingat->id,
+            'jadwal_id' => $jadwal->id,
+            'user_id'   => $this->testUser->id,
+            'is_active' => true,
+        ]);
+    }
+
+    /** @test TC-B02: PengingatWaktu tersimpan dengan offset_menit yang benar */
+    public function test_tcb02_pengingat_waktu_tersimpan_ke_db(): void
+    {
+        $jadwal    = $this->buatJadwalMendatang();
+        $pengingat = $this->buatPengingat($jadwal, true, 1440);
+
+        $this->assertDatabaseHas('pengingat_waktu', [
+            'pengingat_id' => $pengingat->id,
+            'offset_menit' => 1440,
+        ]);
+    }
+
+    /** @test TC-B03: Toggle aktif — is_active berubah dari false ke true */
+    public function test_tcb03_toggle_aktifkan_pengingat(): void
+    {
+        $jadwal    = $this->buatJadwalMendatang();
+        $pengingat = $this->buatPengingat($jadwal, false);
+
+        $pengingat->update(['is_active' => true]);
+
+        $fresh = Pengingat::find($pengingat->id);
+        $this->assertTrue($fresh->is_active);
+        $this->assertDatabaseHas('pengingat', ['id' => $pengingat->id, 'is_active' => true]);
+    }
+
+    /** @test TC-B04: Toggle nonaktif — is_active berubah dari true ke false */
+    public function test_tcb04_toggle_nonaktifkan_pengingat(): void
+    {
+        $jadwal    = $this->buatJadwalMendatang();
+        $pengingat = $this->buatPengingat($jadwal, true);
+
+        $pengingat->update(['is_active' => false]);
+
+        $fresh = Pengingat::find($pengingat->id);
+        $this->assertFalse($fresh->is_active);
+        $this->assertDatabaseHas('pengingat', ['id' => $pengingat->id, 'is_active' => false]);
+    }
+
+    /** @test TC-B05: Update offset_menit — waktu lama terhapus, waktu baru tersimpan */
+    public function test_tcb05_update_offset_hapus_lama_simpan_baru(): void
+    {
+        $jadwal    = $this->buatJadwalMendatang();
+        $pengingat = $this->buatPengingat($jadwal, true, 1440);
+
+        // Simulasi update seperti di controller
+        $pengingat->waktu()->delete();
+        $pengingat->waktu()->create(['offset_menit' => 360]);
+
+        $this->assertDatabaseMissing('pengingat_waktu', [
+            'pengingat_id' => $pengingat->id,
+            'offset_menit' => 1440,
+        ]);
+        $this->assertDatabaseHas('pengingat_waktu', [
+            'pengingat_id' => $pengingat->id,
+            'offset_menit' => 360,
+        ]);
+    }
+
+    /** @test TC-B06: Notifikasi tersimpan ke tabel notifikasi dengan benar */
+    public function test_tcb06_notifikasi_tersimpan_ke_db(): void
+    {
+        $jadwal    = $this->buatJadwalMendatang();
+        $pengingat = $this->buatPengingat($jadwal);
+        $waktu     = $pengingat->waktu()->first();
+
+        $notif = Notifikasi::create([
+            'user_id'            => $this->testUser->id,
+            'jadwal_id'          => $jadwal->id,
+            'pengingat_waktu_id' => $waktu->id,
+            'judul'              => 'Pengingat Test B06',
+            'pesan'              => 'Jangan lupa jadwal besok.',
+            'is_read'            => false,
+            'notified_at'        => now(),
+        ]);
+
+        $this->assertDatabaseHas('notifikasi', [
+            'id'      => $notif->id,
+            'user_id' => $this->testUser->id,
+            'judul'   => 'Pengingat Test B06',
+            'is_read' => false,
+        ]);
+    }
+
+    /** @test TC-B07: markRead — notifikasi berubah is_read menjadi true */
+    public function test_tcb07_mark_read_notifikasi(): void
+    {
+        $jadwal    = $this->buatJadwalMendatang();
+        $pengingat = $this->buatPengingat($jadwal);
+        $waktu     = $pengingat->waktu()->first();
+
+        $notif = Notifikasi::create([
+            'user_id'            => $this->testUser->id,
+            'jadwal_id'          => $jadwal->id,
+            'pengingat_waktu_id' => $waktu->id,
+            'judul'              => 'Test B07 Mark Read',
+            'pesan'              => 'Pesan test.',
+            'is_read'            => false,
+            'notified_at'        => now(),
+        ]);
+
+        $notif->update(['is_read' => true]);
+
+        $this->assertDatabaseHas('notifikasi', [
+            'id'      => $notif->id,
+            'is_read' => true,
+        ]);
+    }
+
+    /** @test TC-B08: Pengingat hanya muncul untuk jadwal berstatus mendatang */
+    public function test_tcb08_pengingat_hanya_untuk_jadwal_mendatang(): void
+    {
+        $jadwalMendatang = $this->buatJadwalMendatang(['status' => 'mendatang']);
+        $jadwalSelesai   = $this->buatJadwalMendatang(['status' => 'selesai']);
+
+        $pMendatang = $this->buatPengingat($jadwalMendatang);
+        $pSelesai   = $this->buatPengingat($jadwalSelesai);
+
+        $hasil = Pengingat::where('user_id', $this->testUser->id)
+                    ->whereHas('jadwal', fn($q) => $q->where('status', 'mendatang'))
+                    ->pluck('id');
+
+        $this->assertContains($pMendatang->id, $hasil);
+        $this->assertNotContains($pSelesai->id, $hasil);
+    }
+
+    /** @test TC-B09: Data isolation — pengingat user lain tidak terlihat */
+    public function test_tcb09_pengingat_terisolasi_antar_user(): void
+    {
+        $uid      = Str::random(6);
+        $userLain = User::create([
+            'full_name'     => 'User Lain PKE10',
+            'email'         => "lain.pke10.{$uid}@test.local",
+            'password_hash' => Hash::make('Password123!'),
+            'role'          => 'user',
+        ]);
+
+        $jadwalSaya   = $this->buatJadwalMendatang();
+        $jadwalMereka = Jadwal::create([
+            'user_id'           => $userLain->id,
+            'jenis_pemeriksaan' => 'Jadwal Mereka',
+            'fasilitas_klinik'  => 'Klinik X',
+            'tanggal'           => now()->addDays(5)->format('Y-m-d'),
+            'waktu'             => '10:00',
+            'status'            => 'mendatang',
+        ]);
+
+        $pingSaya   = $this->buatPengingat($jadwalSaya);
+        $pingMereka = Pengingat::create([
+            'jadwal_id' => $jadwalMereka->id,
+            'user_id'   => $userLain->id,
+            'is_active' => true,
+        ]);
+
+        $hasil = Pengingat::where('user_id', $this->testUser->id)->pluck('id');
+
+        $this->assertContains($pingSaya->id, $hasil);
+        $this->assertNotContains($pingMereka->id, $hasil);
+
+        $pingMereka->delete();
+        $jadwalMereka->delete();
+        $userLain->delete();
+    }
+
+    /** @test TC-B10: Relasi Pengingat → PengingatWaktu berfungsi */
+    public function test_tcb10_relasi_pengingat_ke_waktu(): void
+    {
+        $jadwal    = $this->buatJadwalMendatang();
+        $pengingat = $this->buatPengingat($jadwal, true, 720);
+
+        $loaded = Pengingat::with('waktu')->find($pengingat->id);
+
+        $this->assertCount(1, $loaded->waktu);
+        $this->assertEquals(720, $loaded->waktu->first()->offset_menit);
+    }
+
+    /** @test TC-B11: Notifikasi unread terhitung benar */
+    public function test_tcb11_unread_count_notifikasi(): void
+    {
+        $jadwal    = $this->buatJadwalMendatang();
+        $pengingat = $this->buatPengingat($jadwal);
+        $waktu     = $pengingat->waktu()->first();
+
+        Notifikasi::create([
+            'user_id' => $this->testUser->id, 'jadwal_id' => $jadwal->id,
+            'pengingat_waktu_id' => $waktu->id, 'judul' => 'Notif 1',
+            'pesan' => 'Pesan 1', 'is_read' => false, 'notified_at' => now(),
+        ]);
+        Notifikasi::create([
+            'user_id' => $this->testUser->id, 'jadwal_id' => $jadwal->id,
+            'pengingat_waktu_id' => $waktu->id, 'judul' => 'Notif 2',
+            'pesan' => 'Pesan 2', 'is_read' => true, 'notified_at' => now(),
+        ]);
+
+        $unread = Notifikasi::where('user_id', $this->testUser->id)
+                    ->where('is_read', false)
+                    ->count();
+
+        $this->assertEquals(1, $unread);
+    }
+
+    /** @test TC-B12: OFFSET_OPTIONS controller memuat semua nilai yang valid */
+    public function test_tcb12_offset_options_valid(): void
+    {
+        $validOffsets = [30, 60, 180, 360, 720, 1440, 2880];
+
+        foreach ($validOffsets as $offset) {
+            $this->assertArrayHasKey(
+                $offset,
+                \App\Http\Controllers\PengingatController::OFFSET_OPTIONS
+            );
+        }
+    }
 }

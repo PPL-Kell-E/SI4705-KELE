@@ -529,4 +529,223 @@ class PKE5_JadwalTest extends DuskTestCase
                  ->screenshot('tc25-data-jadwal-terbaru');
         });
     }
+
+    // =========================================================================
+    // BACKEND / DATABASE TESTS (tanpa browser)
+    // =========================================================================
+
+    /** @test TC-B01: Jadwal tersimpan ke tabel jadwal dengan field yang benar */
+    public function test_tcb01_jadwal_tersimpan_ke_db(): void
+    {
+        $tanggal = now()->addDays(7)->format('Y-m-d');
+        $jadwal  = $this->createJadwal([
+            'jenis_pemeriksaan' => 'Pemeriksaan Darah',
+            'fasilitas_klinik'  => 'Klinik Sehat',
+            'tanggal'           => $tanggal,
+            'waktu'             => '10:00',
+        ]);
+
+        $this->assertDatabaseHas('jadwal', [
+            'user_id'           => $this->testUser->id,
+            'jenis_pemeriksaan' => 'Pemeriksaan Darah',
+            'fasilitas_klinik'  => 'Klinik Sehat',
+            'waktu'             => '10:00',
+        ]);
+        // Cek tanggal via model (hindari perbedaan format datetime SQLite)
+        $fresh = Jadwal::find($jadwal->id);
+        $this->assertEquals($tanggal, $fresh->tanggal->format('Y-m-d'));
+        $this->assertNotNull($jadwal->id);
+    }
+
+    /** @test TC-B02: Status otomatis 'mendatang' untuk tanggal yang akan datang */
+    public function test_tcb02_status_mendatang_untuk_tanggal_masa_depan(): void
+    {
+        $jadwal = $this->createJadwal([
+            'tanggal' => now()->addDays(5)->format('Y-m-d'),
+            'status'  => 'mendatang',
+        ]);
+
+        $this->assertEquals('mendatang', $jadwal->fresh()->status);
+        $this->assertDatabaseHas('jadwal', [
+            'id'     => $jadwal->id,
+            'status' => 'mendatang',
+        ]);
+    }
+
+    /** @test TC-B03: Status bisa diubah ke 'selesai' */
+    public function test_tcb03_status_bisa_diubah_ke_selesai(): void
+    {
+        $jadwal = $this->createJadwal(['status' => 'mendatang']);
+
+        $jadwal->update(['status' => 'selesai']);
+
+        $this->assertDatabaseHas('jadwal', [
+            'id'     => $jadwal->id,
+            'status' => 'selesai',
+        ]);
+    }
+
+    /** @test TC-B04: Status bisa diubah ke 'batal' */
+    public function test_tcb04_status_bisa_diubah_ke_batal(): void
+    {
+        $jadwal = $this->createJadwal(['status' => 'mendatang']);
+
+        $jadwal->update(['status' => 'batal']);
+
+        $this->assertDatabaseHas('jadwal', [
+            'id'     => $jadwal->id,
+            'status' => 'batal',
+        ]);
+    }
+
+    /** @test TC-B05: Edit jadwal — perubahan tersimpan ke DB */
+    public function test_tcb05_edit_jadwal_tersimpan_ke_db(): void
+    {
+        $jadwal      = $this->createJadwal(['jenis_pemeriksaan' => 'Cek Awal']);
+        $tanggalBaru = now()->addDays(10)->format('Y-m-d');
+
+        $jadwal->update([
+            'jenis_pemeriksaan' => 'Cek Gula Darah',
+            'tanggal'           => $tanggalBaru,
+            'waktu'             => '14:00',
+        ]);
+
+        $this->assertDatabaseHas('jadwal', [
+            'id'                => $jadwal->id,
+            'jenis_pemeriksaan' => 'Cek Gula Darah',
+            'waktu'             => '14:00',
+        ]);
+        // Cek tanggal via model (hindari perbedaan format datetime SQLite)
+        $fresh = Jadwal::find($jadwal->id);
+        $this->assertEquals($tanggalBaru, $fresh->tanggal->format('Y-m-d'));
+        $this->assertDatabaseMissing('jadwal', [
+            'id'                => $jadwal->id,
+            'jenis_pemeriksaan' => 'Cek Awal',
+        ]);
+    }
+
+    /** @test TC-B06: Hapus jadwal — data hilang dari DB */
+    public function test_tcb06_hapus_jadwal_hilang_dari_db(): void
+    {
+        $jadwal = $this->createJadwal(['jenis_pemeriksaan' => 'Jadwal Akan Dihapus']);
+        $id     = $jadwal->id;
+
+        $jadwal->delete();
+
+        $this->assertDatabaseMissing('jadwal', ['id' => $id]);
+    }
+
+    /** @test TC-B07: Filter mendatang hanya mengembalikan jadwal dengan status mendatang */
+    public function test_tcb07_filter_status_mendatang(): void
+    {
+        $this->createJadwal(['status' => 'mendatang']);
+        $this->createJadwal(['jenis_pemeriksaan' => 'Jadwal Selesai', 'status' => 'selesai']);
+
+        $mendatang = Jadwal::where('user_id', $this->testUser->id)
+                           ->where('status', 'mendatang')
+                           ->get();
+
+        $this->assertGreaterThan(0, $mendatang->count());
+        $mendatang->each(fn($j) => $this->assertEquals('mendatang', $j->status));
+    }
+
+    /** @test TC-B08: Filter selesai/batal mengembalikan jadwal yang sudah lewat */
+    public function test_tcb08_filter_status_selesai_dan_batal(): void
+    {
+        $this->createJadwal(['status' => 'selesai']);
+        $this->createJadwal(['jenis_pemeriksaan' => 'Jadwal Batal', 'status' => 'batal']);
+
+        $selesai = Jadwal::where('user_id', $this->testUser->id)
+                         ->whereIn('status', ['selesai', 'batal'])
+                         ->get();
+
+        $this->assertGreaterThan(0, $selesai->count());
+        $selesai->each(fn($j) => $this->assertContains($j->status, ['selesai', 'batal']));
+    }
+
+    /** @test TC-B09: Jadwal diurutkan berdasarkan tanggal ascending */
+    public function test_tcb09_jadwal_diurutkan_berdasarkan_tanggal(): void
+    {
+        $this->createJadwal(['tanggal' => now()->addDays(10)->format('Y-m-d')]);
+        $this->createJadwal(['tanggal' => now()->addDays(3)->format('Y-m-d')]);
+        $this->createJadwal(['tanggal' => now()->addDays(7)->format('Y-m-d')]);
+
+        $jadwals = Jadwal::where('user_id', $this->testUser->id)
+                         ->orderBy('tanggal', 'asc')
+                         ->pluck('tanggal')
+                         ->toArray();
+
+        $sorted = $jadwals;
+        sort($sorted);
+        $this->assertEquals($sorted, $jadwals, 'Jadwal harus diurutkan dari tanggal paling awal');
+    }
+
+    /** @test TC-B10: Catatan boleh null tanpa error */
+    public function test_tcb10_catatan_boleh_null(): void
+    {
+        $jadwal = $this->createJadwal(['catatan' => null]);
+
+        $fresh = Jadwal::find($jadwal->id);
+        $this->assertNull($fresh->catatan);
+        $this->assertDatabaseHas('jadwal', ['id' => $jadwal->id]);
+    }
+
+    /** @test TC-B11: Jadwal terisolasi per user — tidak bocor ke user lain */
+    public function test_tcb11_jadwal_terisolasi_per_user(): void
+    {
+        $uniqueId = Str::random(8);
+        $other    = User::create([
+            'full_name'     => 'User Lain PKE5',
+            'email'         => "other.pke5.{$uniqueId}@test.local",
+            'password_hash' => Hash::make('Password123!'),
+            'role'          => 'user',
+        ]);
+
+        $this->createJadwal(['jenis_pemeriksaan' => 'Jadwal Milik Saya']);
+        Jadwal::create([
+            'user_id'           => $other->id,
+            'jenis_pemeriksaan' => 'Jadwal Milik Orang Lain',
+            'fasilitas_klinik'  => 'Klinik Lain',
+            'tanggal'           => now()->addDays(5)->format('Y-m-d'),
+            'waktu'             => '08:00',
+            'status'            => 'mendatang',
+        ]);
+
+        $milikSaya  = Jadwal::where('user_id', $this->testUser->id)->pluck('jenis_pemeriksaan');
+        $milikOther = Jadwal::where('user_id', $other->id)->pluck('jenis_pemeriksaan');
+
+        $this->assertContains('Jadwal Milik Saya', $milikSaya);
+        $this->assertNotContains('Jadwal Milik Orang Lain', $milikSaya);
+        $this->assertNotContains('Jadwal Milik Saya', $milikOther);
+
+        // Cleanup
+        Jadwal::where('user_id', $other->id)->delete();
+        $other->delete();
+    }
+
+    /** @test TC-B12: tandaiSelesai mengubah status jadwal menjadi selesai di DB */
+    public function test_tcb12_tandai_selesai_mengubah_status(): void
+    {
+        $jadwal = $this->createJadwal(['status' => 'mendatang']);
+
+        $jadwal->update(['status' => 'selesai']);
+
+        $this->assertDatabaseHas('jadwal', [
+            'id'     => $jadwal->id,
+            'status' => 'selesai',
+        ]);
+    }
+
+    /** @test TC-B13: updated_at berubah setelah jadwal diedit */
+    public function test_tcb13_updated_at_berubah_setelah_edit(): void
+    {
+        $jadwal = $this->createJadwal();
+        $before = $jadwal->updated_at;
+
+        sleep(1);
+        $jadwal->update(['jenis_pemeriksaan' => 'Nama Diperbarui']);
+
+        $after = Jadwal::find($jadwal->id)->updated_at;
+        $this->assertTrue($after->greaterThan($before), 'updated_at harus berubah setelah edit');
+    }
 }
