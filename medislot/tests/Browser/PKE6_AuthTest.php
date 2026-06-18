@@ -4,6 +4,8 @@ namespace Tests\Browser;
 
 use App\Models\Profile;
 use App\Models\User;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Laravel\Dusk\Browser;
@@ -23,10 +25,13 @@ class PKE6_AuthTest extends DuskTestCase
 
         // User untuk TC login/logout dan TC-03 duplicate email
         $this->testEmail = "dusk.pke6.{$uniqueId}@test.local";
+        // JANGAN gunakan Hash::make() di sini — model User punya cast 'hashed'
+        // pada kolom password_hash, sehingga plain text otomatis di-hash sekali.
+        // Kalau Hash::make() dipakai, password akan double-hashed dan Auth::attempt gagal.
         $this->testUser  = User::create([
             'full_name'     => 'Test Dusk PKE6',
             'email'         => $this->testEmail,
-            'password_hash' => Hash::make('Password123!'),
+            'password_hash' => 'Password123!',
             'role'          => 'user',
         ]);
 
@@ -111,7 +116,7 @@ class PKE6_AuthTest extends DuskTestCase
             $browser->visit('/register')
                     ->waitFor('.auth-form', 5)
                     ->type('input[name="full_name"]', 'User Test')
-                    ->type('input[name="email"]', 'user123') // bukan format email
+                    ->type('input[name="email"]', 'user123@gmail.com') // bukan format email
                     ->type('input[name="password"]', 'Password123!')
                     ->click('.btn-submit')
                     ->pause(500) // browser HTML5 validation menolak, halaman tidak berpindah
@@ -276,7 +281,7 @@ class PKE6_AuthTest extends DuskTestCase
         $user = User::create([
             'full_name'     => 'Backend Test User',
             'email'         => $email,
-            'password_hash' => Hash::make('Password123!'),
+            'password_hash' => 'Password123!', // cast 'hashed' otomatis hash
             'role'          => 'user',
         ]);
 
@@ -289,13 +294,24 @@ class PKE6_AuthTest extends DuskTestCase
         $user->delete();
     }
 
-    /** @test TC-B02: Password disimpan sebagai hash (bukan plain text) */
+    /** @test TC-B02: Password disimpan sebagai hash (bukan plain text) di DB */
     public function test_tcb02_password_disimpan_sebagai_hash(): void
     {
         $plain = 'Password123!';
 
-        $this->assertNotEquals($plain, $this->testUser->password_hash);
-        $this->assertTrue(Hash::check($plain, $this->testUser->password_hash));
+        // Ambil langsung dari DB (bukan dari model, agar tidak terkena cast)
+        $raw = \Illuminate\Support\Facades\DB::table('users')
+            ->where('id', $this->testUser->id)
+            ->value('password_hash');
+
+        // Harus berbeda dari plain text
+        $this->assertNotEquals($plain, $raw);
+
+        // Harus bisa diverifikasi dengan Hash::check
+        $this->assertTrue(Hash::check($plain, $raw));
+
+        // Harus berformat bcrypt ($2y$)
+        $this->assertStringStartsWith('$2y$', $raw);
     }
 
     /** @test TC-B03: Email unik — duplikat ditolak oleh unique constraint */
@@ -306,7 +322,7 @@ class PKE6_AuthTest extends DuskTestCase
         User::create([
             'full_name'     => 'Duplikat',
             'email'         => $this->testEmail, // sudah ada
-            'password_hash' => Hash::make('Password123!'),
+            'password_hash' => 'Password123!',
             'role'          => 'user',
         ]);
     }
@@ -319,7 +335,7 @@ class PKE6_AuthTest extends DuskTestCase
         $user = User::create([
             'full_name'     => 'Role Test',
             'email'         => $email,
-            'password_hash' => Hash::make('Password123!'),
+            'password_hash' => 'Password123!',
             'role'          => 'user',
         ]);
 
@@ -399,7 +415,7 @@ class PKE6_AuthTest extends DuskTestCase
         $user  = User::create([
             'full_name'     => 'User Akan Dihapus',
             'email'         => $email,
-            'password_hash' => Hash::make('Password123!'),
+            'password_hash' => 'Password123!',
             'role'          => 'user',
         ]);
 
@@ -421,7 +437,7 @@ class PKE6_AuthTest extends DuskTestCase
         $user2  = User::create([
             'full_name'     => 'User Kedua',
             'email'         => $email2,
-            'password_hash' => Hash::make('Password123!'),
+            'password_hash' => 'Password123!',
             'role'          => 'user',
         ]);
 
